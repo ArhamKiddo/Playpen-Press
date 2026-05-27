@@ -81,7 +81,7 @@ export default function App() {
           })));
         }
 
-        // 2. Fetch the active visual front page layout mapping slots
+// 2. Fetch the active visual front page layout mapping slots
         const { data: slotsData, error: slotError } = await supabase
           .from("layout_slots")
           .select("*");
