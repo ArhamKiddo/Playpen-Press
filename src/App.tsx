@@ -41,8 +41,7 @@ import {
   Moon,
   Lock,
   Unlock,
-  Upload,
-  Edit3
+  Upload
 } from "lucide-react";
 import MainHeader from "./components/MainHeader";
 import ArticleCard from "./components/ArticleCard";
@@ -52,9 +51,63 @@ import { Article, EditorialReview, PitchIdea, HeadlineOption } from "./types";
 
 export default function App() {
   const [articles, setArticles] = useState<Article[]>([]);
+  const [pageSlots, setPageSlots] = useState<{
+    heroId: string | null;
+    secondaryId: string | null;
+    subFeatureId: string | null;
+  }>({
+    heroId: null,
+    secondaryId: null,
+    subFeatureId: null
+  });
   const [loading, setLoading] = useState<boolean>(true);
+
+  // Core Real-time Fetch Synchronization
+  useEffect(() => {
+    const fetchNewspaperData = async () => {
+      setLoading(true);
+      try {
+        // 1. Fetch all published articles from Supabase cloud ledger
+        const { data: articlesData, error: artError } = await supabase
+          .from("articles")
+          .select("*")
+          .order("created_at", { ascending: false });
+        
+        if (artError) throw artError;
+        if (articlesData) {
+          setArticles(articlesData.map(art => ({
+            ...art,
+            tags: art.tags || [art.category, "Featured"]
+          })));
+        }
+
+        // 2. Fetch the active visual front page layout mapping slots
+        const { data: slotsData, error: slotError } = await supabase
+          .from("layout_slots")
+          .select("*");
+        
+        if (slotError) throw slotError;
+        if (slotsData) {
+          const mapping = { heroId: null, secondaryId: null, subFeatureId: null };
+          slotsData.forEach(slot => {
+            if (slot.slot_name === "hero") mapping.heroId = slot.article_id;
+            if (slot.slot_name === "secondary") mapping.secondaryId = slot.article_id;
+            if (slot.slot_name === "sub_feature") mapping.subFeatureId = slot.article_id;
+          });
+          setPageSlots(mapping);
+        }
+      } catch (err: any) {
+        console.error("Supabase Initialization Error:", err.message);
+        showToast("Error connecting to database infrastructure.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNewspaperData();
+  }, []);
+
   const [currentTab, setCurrentTab] = useState<"home" | "archive">("home");
-  
   const [theme, setTheme] = useState<"purple-cream" | "purple-grey">(() => {
     const saved = localStorage.getItem("editorial-theme");
     return (saved === "purple-grey" || saved === "purple-cream") ? saved : "purple-cream";
@@ -73,7 +126,7 @@ export default function App() {
   // Permissions & Access Controls
   const [userRole, setUserRole] = useState<"Viewer" | "Editor">("Viewer");
   const [isEditorMode, setIsEditorMode] = useState<boolean>(false);
-  
+  const [editorSubMode, setEditorSubMode] = useState<"Layout Designer" | "Text Editor">("Layout Designer");
   const [siteTitle, setSiteTitle] = useState<string>(() => {
     return localStorage.getItem("reaquit-site-title") || "The Playpen Press";
   });
@@ -85,19 +138,22 @@ export default function App() {
   const [isContentDeskOpen, setIsContentDeskOpen] = useState<boolean>(false);
   const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
   const [passwordInput, setPasswordInput] = useState<string>("");
+  const [isHeroDraggingOver, setIsHeroDraggingOver] = useState<boolean>(false);
+  const [isSecondaryDraggingOver, setIsSecondaryDraggingOver] = useState<boolean>(false);
+  const [isSubFeatureDraggingOver, setIsSubFeatureDraggingOver] = useState<boolean>(false);
   const [leftSidebarExpanded, setLeftSidebarExpanded] = useState<boolean>(true);
   
   // Bookmarks & Anonymous tips
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>([]);
+  const [tipTopic, setTipTopic] = useState<string>("");
+  const [tipMessage, setTipMessage] = useState<string>("");
+  const [submittedTips, setSubmittedTips] = useState<Array<{id: number, topic: string, message: string, timestamp: string}>>([]);
+  const [draftTextForCounter, setDraftTextForCounter] = useState<string>("");
+
+  // Modals & Slideouts
   const [showPublishModal, setShowPublishModal] = useState<boolean>(false);
   const [showAiLab, setShowAiLab] = useState<boolean>(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
-
-  // Archive Tag Editing State
-  const [tagEditingArticleId, setTagEditingArticleId] = useState<string | null>(null);
-  const [editingArticleCategory, setEditingArticleCategory] = useState<string>("");
-  const [editingArticleTags, setEditingArticleTags] = useState<string[]>([]);
-  const [newTagInput, setNewTagInput] = useState<string>("");
 
   // Toast System
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -105,42 +161,6 @@ export default function App() {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(null), 4000);
   };
-
-  // Core Data Sync Fetching
-  const fetchNewspaperData = async () => {
-    setLoading(true);
-    try {
-      const { data: articlesData, error: artError } = await supabase
-        .from("articles")
-        .select("*")
-        .order("created_at", { ascending: false });
-      
-      if (artError) throw artError;
-      if (articlesData) {
-        setArticles(articlesData.map(art => ({
-          id: art.id,
-          headline: art.title || art.headline,
-          subheading: art.subheading,
-          byline: art.byline,
-          date: art.date,
-          category: art.category,
-          paragraphs: art.paragraphs || [],
-          imageUrl: art.image_data || art.imageUrl,
-          readTime: art.read_time || art.readTime,
-          tags: art.tags || [art.category]
-        })));
-      }
-    } catch (err: any) {
-      console.error("Supabase Synchronization Error:", err.message);
-      showToast("Error connecting to database infrastructure.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchNewspaperData();
-  }, []);
 
   // Pending Review Submission Array System
   const [pendingReviews, setPendingReviews] = useState<Article[]>([
@@ -161,21 +181,29 @@ export default function App() {
     }
   ]);
 
+  // Review panel parameters
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
+  const [editReviewHeadline, setEditReviewHeadline] = useState("");
+  const [editReviewByline, setEditReviewByline] = useState("");
+  const [editReviewCategory, setEditReviewCategory] = useState("Campus Life (Opinions)");
+  const [editReviewBodyText, setEditReviewBodyText] = useState("");
+  const [editReviewImageUrl, setEditReviewImageUrl] = useState("");
+  const [editReviewDate, setEditReviewDate] = useState("");
+  const [editReviewTags, setEditReviewTags] = useState<string[]>([]);
 
-  // Composer Form States with managed Tags list
+  // Composer Controlled Form State Values
   const [editorFormHeadline, setEditorFormHeadline] = useState("");
   const [editorFormByline, setEditorFormByline] = useState("");
   const [editorFormSubheading, setEditorFormSubheading] = useState("");
   const [editorFormCategory, setEditorFormCategory] = useState("Campus Life (Opinions)");
   const [editorFormBodyText, setEditorFormBodyText] = useState("");
-  const [editorFormImageUrl, setEditorFormImageUrl] = useState(""); 
+  const [editorFormImageUrl, setEditorFormImageUrl] = useState(""); // Captures the base64 string asset
   const [editorFormDate, setEditorFormDate] = useState(() => new Date().toISOString().split('T')[0]);
-  const [editorFormTags, setEditorFormTags] = useState<string[]>(["Featured"]);
-  const [composerTagInput, setComposerTagInput] = useState("");
+  const [editorFormTags, setEditorFormTags] = useState<string[]>(["Campus Life (Opinions)"]);
 
   // Category sorting state on Archive Page
   const [archiveSortOrder, setArchiveSortOrder] = useState<"newest" | "oldest">("newest");
+  const [archiveFilterTags, setArchiveFilterTags] = useState<string[]>([]);
   const [archiveSearch, setArchiveSearch] = useState<string>("");
 
   // AI Assistant specific states
@@ -197,14 +225,7 @@ export default function App() {
   const [aiHeadlinesOutput, setAiHeadlinesOutput] = useState<{ headlines: HeadlineOption[] } | null>(null);
   const [aiPitchesOutput, setAiPitchesOutput] = useState<{ ideas: PitchIdea[] } | null>(null);
 
-  const availableCategories = [
-    "Campus Life (Opinions)",
-    "Phantoms Sports",
-    "Studies",
-    "Events and Clubs"
-  ];
-
-  // Pretty Date Parser Formatter
+  // Date Parser Formatter
   const formatDatePretty = (dateStr: string) => {
     if (!dateStr) return "Unknown Date";
     if (dateStr.includes("-")) {
@@ -227,15 +248,69 @@ export default function App() {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      setEditorFormImageUrl(reader.result as string);
+      const base64String = reader.result as string;
+      setEditorFormImageUrl(base64String); // Commits compressed local graphic straight into local component form state
       showToast("Local illustrative asset uploaded and packed! 📸");
     };
     reader.readAsDataURL(file);
   };
 
-  // Inline Click Editor Field Loss Save Interceptor
+  // Drag operations configuration
+  const handleDragStart = (e: React.DragEvent, articleId: string) => {
+    const article = articles.find(a => a.id === articleId);
+    if (article) {
+      e.dataTransfer.setData("text/plain", JSON.stringify(article));
+    } else {
+      e.dataTransfer.setData("text/plain", articleId);
+    }
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  // Cloud Dropzone Slot State Execution Mutations
+  const handleSlotDrop = async (e: React.DragEvent, slotKey: "hero" | "secondary" | "subFeature") => {
+    e.preventDefault();
+    const rawData = e.dataTransfer.getData("text/plain");
+    if (!rawData) return;
+
+    let articleId = "";
+    try {
+      const parsed = JSON.parse(rawData);
+      articleId = parsed.id;
+    } catch (jsonErr) {
+      articleId = rawData;
+    }
+
+    if (articleId) {
+      const databaseSlotName = slotKey === "subFeature" ? "sub_feature" : slotKey;
+      
+      // Local State Commit
+      setPageSlots(prev => ({
+        ...prev,
+        [`${slotKey}Id`]: articleId
+      }));
+
+      // Cloud Persistence Commit
+      const { error } = await supabase
+        .from("layout_slots")
+        .update({ article_id: articleId })
+        .eq("slot_name", databaseSlotName);
+
+      if (error) {
+        console.error("Dropzone mapping allocation rejected:", error.message);
+        showToast("Network failure. Position syncing decoupled.");
+      } else {
+        const found = articles.find(a => a.id === articleId);
+        showToast(`Linked "${found ? found.headline.slice(0, 20) : "Article"}..." to Marquee! 🎯`);
+      }
+    }
+  };
+
+  // Inline Click Editor Focus Loss Save Interceptor
   const handleInlineTextSave = async (articleId: string, field: "headline" | "subheading" | "byline", updatedValue: string) => {
-    setArticles(prev => prev.map(art => String(art.id) === String(articleId) ? { ...art, [field]: updatedValue } : art));
+    // 1. Local tracking updates
+    setArticles(prev => prev.map(art => art.id === articleId ? { ...art, [field]: updatedValue } : art));
+
+    // 2. Cloud structural updates
     const dbFieldMapping = field === "headline" ? "title" : field;
     const { error } = await supabase
       .from("articles")
@@ -254,6 +329,7 @@ export default function App() {
     const isConfirmed = window.confirm("Are you sure you want to permanently delete this article from the database archive?");
     if (!isConfirmed) return;
 
+    // 1. Purge raw database records
     const { error } = await supabase
       .from("articles")
       .delete()
@@ -265,49 +341,17 @@ export default function App() {
       return;
     }
 
-    setArticles(prev => prev.filter(art => String(art.id) !== String(articleId)));
+    // 2. Clean local structural views
+    setArticles(prev => prev.filter(art => art.id !== articleId));
+    setPageSlots(prev => {
+      const updated = { ...prev };
+      if (updated.heroId === articleId) updated.heroId = null;
+      if (updated.secondaryId === articleId) updated.secondaryId = null;
+      if (updated.subFeatureId === articleId) updated.subFeatureId = null;
+      return updated;
+    });
+
     showToast("Article permanently deleted from entire server! 🗑️");
-  };
-
-  // Check and Toggle Front Page Tag with 3 slots max rule validation
-  const validateAndToggleFrontPageTag = (currentTags: string[], targetArticleId?: string): string[] => {
-    const hasFrontPage = currentTags.includes("Front Page");
-    if (hasFrontPage) {
-      return currentTags.filter(t => t !== "Front Page");
-    } else {
-      // Validate how many overall articles currently hold the front page tag
-      const overallFrontPageCount = articles.filter(a => String(a.id) !== String(targetArticleId) && a.tags?.includes("Front Page")).length;
-      if (overallFrontPageCount >= 3) {
-        alert("Action Restricted: Only 3 articles can hold the 'Front Page' tag simultaneously. Please remove it from an existing article first.");
-        return currentTags;
-      }
-      return [...currentTags, "Front Page"];
-    }
-  };
-
-  // Save tags/category changes from the Archive Editor view
-  const handleSaveArticleTagsAndCategory = async (articleId: string) => {
-    setArticles(prev => prev.map(art => 
-      String(art.id) === String(articleId) 
-        ? { ...art, category: editingArticleCategory, tags: editingArticleTags } 
-        : art
-    ));
-
-    const { error } = await supabase
-      .from("articles")
-      .update({
-        category: editingArticleCategory,
-        tags: editingArticleTags
-      })
-      .eq("id", articleId);
-
-    if (error) {
-      console.error("Failed to commit tags/category adjustments:", error.message);
-      showToast("Database synchronization issue.");
-    } else {
-      showToast("Article tags and section classification updated successfully! 🏷️");
-      setTagEditingArticleId(null);
-    }
   };
 
   // Publishing Composer Form Insertion
@@ -316,16 +360,6 @@ export default function App() {
     if (!editorFormHeadline.trim() || !editorFormBodyText.trim() || !editorFormByline.trim()) {
       alert("Please specify Headline, Author, and Body Narrative.");
       return;
-    }
-
-    // Double check Front Page count validation for new entries
-    if (editorFormTags.includes("Front Page")) {
-      const overallFrontPageCount = articles.filter(a => a.tags?.includes("Front Page")).length;
-      if (overallFrontPageCount >= 3) {
-        alert("Action Restricted: Only 3 articles can hold the 'Front Page' tag simultaneously. 'Front Page' tag removed from this submission. Please adjust tags later.");
-        setEditorFormTags(prev => prev.filter(t => t !== "Front Page"));
-        return;
-      }
     }
 
     const payloadArticle = {
@@ -341,6 +375,7 @@ export default function App() {
     };
 
     if (!isEditorMode) {
+      // Reader submission interceptor
       const fallbackObject: Article = {
         id: "submission-" + Date.now(),
         headline: payloadArticle.title,
@@ -356,6 +391,7 @@ export default function App() {
       setPendingReviews([fallbackObject, ...pendingReviews]);
       showToast("Story submitted to Editor's Review Panel! 📬");
     } else {
+      // Live Cloud Deployment injection
       const { data, error } = await supabase
         .from("articles")
         .insert([payloadArticle])
@@ -385,17 +421,66 @@ export default function App() {
       }
     }
 
-    // Reset Form Fields
+    // Reset local insertion variables
     setEditorFormHeadline("");
     setEditorFormSubheading("");
     setEditorFormByline("");
     setEditorFormBodyText("");
     setEditorFormImageUrl("");
-    setEditorFormTags(["Featured"]);
+    setEditorFormTags(["Campus"]);
     setShowPublishModal(false);
   };
 
-  // AI Coprocessor trigger hooks
+  // Review Pipeline publication promotion
+  const handlePublishReviewedSubmission = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingReviewId) return;
+
+    const databasePayload = {
+      title: editReviewHeadline,
+      subheading: "Reviewed student submission.",
+      byline: editReviewByline,
+      date: editReviewDate || new Date().toISOString().split('T')[0],
+      category: editReviewCategory,
+      paragraphs: editReviewBodyText.split("\n\n").filter(p => p.trim() !== ""),
+      image_data: editReviewImageUrl || "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&q=80&w=800",
+      read_time: `${Math.max(1, Math.round(editReviewBodyText.split(/\s+/).length / 250))} min read`,
+      tags: editReviewTags.length > 0 ? editReviewTags : [editReviewCategory]
+    };
+
+    const { data, error } = await supabase
+      .from("articles")
+      .insert([databasePayload])
+      .select();
+
+    if (error) {
+      console.error("Failed to promote review submission:", error.message);
+      showToast("Database synchronization issue.");
+      return;
+    }
+
+    if (data && data[0]) {
+      const processed: Article = {
+        id: data[0].id,
+        headline: data[0].title,
+        subheading: data[0].subheading,
+        byline: data[0].byline,
+        date: data[0].date,
+        category: data[0].category,
+        paragraphs: data[0].paragraphs,
+        imageUrl: data[0].image_data,
+        readTime: data[0].read_time,
+        tags: data[0].tags
+      };
+
+      setArticles([processed, ...articles]);
+      setPendingReviews(pendingReviews.filter(sub => sub.id !== editingReviewId));
+      setEditingReviewId(null);
+      showToast(`Approved and published code row securely!`);
+    }
+  };
+
+  // AI Assistant trigger processing hooks
   const runAiAssistant = async () => {
     setAiLoading(true);
     setAiError(null);
@@ -437,7 +522,7 @@ export default function App() {
 
     } catch (err: any) {
       setAiError(err.message || "Failed to communicate with AI endpoint.");
-    } finaly {
+    } finally {
       setAiLoading(false);
     }
   };
@@ -445,54 +530,104 @@ export default function App() {
   const handleImportAiDraft = () => {
     if (!aiDraftOutput) return;
     setEditorFormHeadline(aiDraftOutput.headline);
-    setEditorFormSubheading("");
-    setEditorFormByline("Playpen Press correspondent");
+    setEditorFormSubheading(aiDraftOutput.subheading);
+    setEditorFormByline(aiDraftOutput.byline || "Playpen Press correspondent");
     setEditorFormBodyText(aiDraftOutput.paragraphs.join("\n\n"));
     setEditorFormCategory(draftSection);
-    setEditorFormTags([draftSection, "Featured"]);
+    setEditorFormTags([draftSection]);
     setShowAiLab(false);
     setShowPublishModal(true);
   };
 
-  // Compute Filtered and Sorted Archive List
+  const handleStartReviewEdit = (sub: Article) => {
+    setEditingReviewId(sub.id);
+    setEditReviewHeadline(sub.headline);
+    setEditReviewByline(sub.byline);
+    setEditReviewCategory(sub.category);
+    setEditReviewDate(sub.date);
+    setEditReviewImageUrl(sub.imageUrl || "");
+    setEditReviewBodyText(sub.paragraphs.join("\n\n"));
+    setEditReviewTags(sub.tags || [sub.category]);
+  };
+
+  // Array filter sorting operations
   const getSortedAndFilteredArchive = () => {
     return (articles || []).filter(article => {
         if (!article) return false;
+        
         const headlineStr = article.headline || "";
         const bylineStr = article.byline || "";
         const categoryStr = article.category || "";
         const searchStr = archiveSearch ? archiveSearch.toLowerCase() : "";
 
-        return headlineStr.toLowerCase().includes(searchStr) ||
-               bylineStr.toLowerCase().includes(searchStr) ||
-               categoryStr.toLowerCase().includes(searchStr);
+        const matchesSearch = headlineStr.toLowerCase().includes(searchStr) ||
+                              bylineStr.toLowerCase().includes(searchStr) ||
+                              categoryStr.toLowerCase().includes(searchStr);
+
+        if (archiveFilterTags.length === 0) return matchesSearch;
+        const articleTags = article.tags || [categoryStr];
+        return matchesSearch && archiveFilterTags.some(t => articleTags.includes(t));
     }).sort((a, b) => {
+        if (!a || !b) return 0;
         const timeA = Date.parse(a.date || "") || 0;
         const timeB = Date.parse(b.date || "") || 0;
         return archiveSortOrder === "newest" ? timeB - timeA : timeA - timeB;
     });
   };
 
-  // Derive Front Page Slots purely from tags query containing "Front Page" (Exactly max 3 slots)
-  const frontPageArticles = (articles || []).filter(art => art.tags?.includes("Front Page")).slice(0, 3);
-  const frontPageIds = frontPageArticles.map(a => String(a.id));
+  // Object State Assignment Handlers
+  const safeArticles = articles || [];
 
-  // Compute feed items excluding the front page pinned ones
+  const fallbackObj = { 
+    headline: "", 
+    byline: "", 
+    category: "", 
+    paragraphs: [], 
+    tags: [], 
+    date: "" 
+  };
+
+  const slottedHero = pageSlots?.heroId 
+    ? (safeArticles.find(a => a?.id === pageSlots.heroId) || fallbackObj) 
+    : fallbackObj;
+
+  const slottedSecondary = pageSlots?.secondaryId 
+    ? (safeArticles.find(a => a?.id === pageSlots.secondaryId) || fallbackObj) 
+    : fallbackObj;
+
+  const slottedSubFeature = pageSlots?.subFeatureId 
+    ? (safeArticles.find(a => a?.id === pageSlots.subFeatureId) || fallbackObj) 
+    : fallbackObj;
+
+  const currentSlottedIds = [pageSlots.heroId, pageSlots.secondaryId, pageSlots.subFeatureId].filter(Boolean);
+  
   const displayedFeedArticles = (articles || []).filter(art => {
     if (!art) return false;
-    if (frontPageIds.includes(String(art.id))) return false;
 
-    const matchesCategory = selectedCategory === "All" || art.category === selectedCategory || art.tags?.includes(selectedCategory);
+    const isSlotted = currentSlottedIds ? currentSlottedIds.includes(art.id) : false;
+    
+    const categoryStr = art.category || "";
+    const artTags = art.tags || [];
+    const matchesCategory = selectedCategory === "All" || 
+                            categoryStr === selectedCategory || 
+                            artTags.includes(selectedCategory);
+
+    const headlineStr = art.headline || "";
+    const bylineStr = art.byline || "";
     const searchStr = searchQuery ? searchQuery.toLowerCase() : "";
-    const matchesSearch = (art.headline || "").toLowerCase().includes(searchStr) || (art.byline || "").toLowerCase().includes(searchStr);
 
-    return matchesCategory && matchesSearch;
+    const matchesSearch = headlineStr.toLowerCase().includes(searchStr) || 
+                          bylineStr.toLowerCase().includes(searchStr);
+
+    return !isSlotted && matchesCategory && matchesSearch;
   });
+
+  const availableTags = ["Campus", "Sports", "Opinion", "Science", "Tech", "Arts"];
 
   return (
     <div className={`min-h-screen bg-zinc-950 text-zinc-100 font-sans antialiased selection:bg-amber-400 selection:text-zinc-950 theme-parent ${theme === "purple-cream" ? "theme-purple-cream" : "theme-purple-grey"}`} id="bento-editorial-root">
       
-      {/* Toast Engine Popups */}
+      {/* Toast Engine Component Container */}
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-amber-500/30 bg-zinc-900 px-5 py-3 shadow-2xl animate-bounce" id="action-toast">
           <div className="h-2 w-2 rounded-full bg-amber-400 animate-ping"></div>
@@ -500,7 +635,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Main Corporate Navigation Header Panel */}
+      {/* Main Structural Header Navbar Component */}
       <MainHeader 
         currentCategory={selectedCategory}
         setCategory={(cat) => {
@@ -518,7 +653,7 @@ export default function App() {
           } else {
             setIsEditorMode(false);
             setUserRole("Viewer");
-            showToast("Switched Mode to: Reader View");
+            showToast("Switched Preview Mode to: Reader View (Live Site)");
           }
         }}
         openSidebar={() => setSidebarOpen(true)}
@@ -531,17 +666,51 @@ export default function App() {
         setSidebarExpanded={setLeftSidebarExpanded}
         siteTitle={siteTitle}
         setSiteTitle={setSiteTitle}
-        editorSubMode="Text Editor"
+        editorSubMode={editorSubMode}
         isEditorMode={isEditorMode}
       />
 
-      {/* TWO-COLUMN REVITALIZED GRID MASTER CANVAS */}
+      {/* THREE-COLUMN MASTER CORE CONTENT WRAPPER CONTAINER */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* NAVIGATION SECTIONS SIDEBAR COLUMN */}
+          {/* COLUMN 1: Left Navigation Segment Panel */}
           {leftSidebarExpanded && (
-            <aside className="lg:col-span-3 space-y-6">
+            <aside className="lg:col-span-2 space-y-6" id="left-collapsible-categories">
+              {isEditorMode && (
+                <div className="bg-zinc-900 border-2 border-amber-400 p-3.5 shadow-lg rounded-xl space-y-2.5 flex flex-col" id="sidebar-submode-segmented">
+                  <span className="text-[10px] font-mono font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5 border-b border-zinc-800 pb-1.5">
+                    <Sliders className="h-3 w-3 text-amber-400" /> Designer Deck Sub-Mode
+                  </span>
+                  <div className="grid grid-cols-2 gap-1 bg-zinc-950 p-1 rounded-lg border border-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditorSubMode("Layout Designer");
+                        showToast("Design Mode: Drag & drop slots activated. 🎨");
+                      }}
+                      className={`text-[9px] py-1.5 px-1.5 rounded font-mono font-bold uppercase tracking-tight text-center transition cursor-pointer ${
+                        editorSubMode === "Layout Designer" ? "bg-amber-400 text-zinc-950 font-black" : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      Layout
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditorSubMode("Text Editor");
+                        showToast("Text Mode: Click on headlines or paragraphs to edit. ✍️");
+                      }}
+                      className={`text-[9px] py-1.5 px-1.5 rounded font-mono font-bold uppercase tracking-tight text-center transition cursor-pointer ${
+                        editorSubMode === "Text Editor" ? "bg-indigo-600 text-white font-black" : "text-zinc-400 hover:text-zinc-200"
+                      }`}
+                    >
+                      Text
+                    </button>
+                  </div>
+                </div>
+              )}
+              
               <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl space-y-4">
                 <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
                   <span className="text-xs font-mono font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5">
@@ -552,10 +721,10 @@ export default function App() {
                 <nav className="flex flex-col space-y-1">
                   {[
                     { key: "All", label: "📰 All Stories" },
-                    { key: "Campus Life (Opinions)", label: "💭 Campus Life" },
+                    { key: "Campus Life (Opinions)", label: "💭 Campus Life (Opinions)" },
                     { key: "Phantoms Sports", label: "🏈 Phantoms Sports" },
                     { key: "Studies", label: "📚 Studies" },
-                    { key: "Events and Clubs", label: "🏡 Events & Clubs" }
+                    { key: "Events and Clubs", label: "🏡 Events and Clubs" }
                   ].map((cat) => {
                     const isActive = selectedCategory === cat.key;
                     return (
@@ -576,8 +745,8 @@ export default function App() {
                 </nav>
               </div>
 
-              {/* Color Layout Theme Palette Swapper */}
-              <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl space-y-3">
+              {/* Theme Settings Module */}
+              <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl space-y-3" id="theme-selector-sidebar-card">
                 <span className="text-xs font-mono font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5 border-b border-zinc-800 pb-2">
                   <Palette className="h-3.5 w-3.5" /> Editorial Theme
                 </span>
@@ -593,8 +762,8 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Executive Credentials Keycard Gate */}
-              <div className="bg-zinc-900 border border-zinc-800 p-4 rounded-xl space-y-3">
+              {/* Security Privileges Authentication Module */}
+              <div className="bg-zinc-900 border border-zinc-805 p-4 rounded-xl space-y-3" id="sidebar-editor-lock-card">
                 <span className="text-xs font-mono font-black uppercase text-amber-400 tracking-wider flex items-center gap-1.5 border-b border-zinc-800 pb-2">
                   <Shield className="h-3.5 w-3.5 text-amber-400" /> Executive Access
                 </span>
@@ -604,7 +773,7 @@ export default function App() {
                     if (isEditorMode) {
                       setIsEditorMode(false);
                       setUserRole("Viewer");
-                      showToast("Editor Desk Locked.");
+                      showToast("Editor Mode Deactivated. Returned to Reader View.");
                     } else {
                       setShowPasswordModal(true);
                     }
@@ -612,9 +781,10 @@ export default function App() {
                   className={`flex items-center justify-between w-full text-left px-3 py-2.5 rounded-lg text-xs font-bold transition border cursor-pointer ${
                     isEditorMode ? "bg-emerald-500/10 text-emerald-400 border-emerald-500 shadow-sm" : "bg-zinc-950/40 text-zinc-400 border-zinc-800 hover:bg-zinc-850 hover:text-zinc-200"
                   }`}
+                  id="enable-editor-sidebar-btn"
                 >
                   <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-wider uppercase font-black">
-                    {isEditorMode ? <><Unlock className="h-4 w-4 text-emerald-400" /> Editor Desk Active</> : <><Lock className="h-4 w-4 text-zinc-500" /> Unlock Desk</>}
+                    {isEditorMode ? <><Unlock className="h-4 w-4 text-emerald-400" /> Editor Active</> : <><Lock className="h-4 w-4 text-zinc-500" /> Enable Editor</>}
                   </span>
                   {isEditorMode && <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>}
                 </button>
@@ -622,19 +792,31 @@ export default function App() {
             </aside>
           )}
 
-          {/* MASTER CONTENT PREVIEW HUB */}
-          <main className={`space-y-8 ${leftSidebarExpanded ? "lg:col-span-9" : "lg:col-span-12"}`}>
+          {/* COLUMN 2: Center Layout Preview Slate */}
+          <main className={`space-y-8 ${isEditorMode && currentTab === "home" ? leftSidebarExpanded ? "lg:col-span-7" : "lg:col-span-9" : leftSidebarExpanded ? "lg:col-span-10" : "lg:col-span-12"}`}>
             
             {loading && (
               <div className="flex items-center justify-center py-6 bg-zinc-900 border border-zinc-800 rounded-xl font-mono text-xs gap-3">
                 <RefreshCw className="h-4 w-4 text-amber-400 animate-spin" />
-                Synchronizing with cloud press registries...
+                Synchronizing with cloud press registry arrays...
               </div>
             )}
 
-            {/* REVITALIZED STAFF COMPOSER HQ BOX */}
+            {isEditorMode && !leftSidebarExpanded && (
+              <div className="bg-zinc-900 border-2 border-amber-400 p-2 text-xs flex items-center justify-between rounded-xl shadow-lg font-mono" id="main-column-editor-bar">
+                <span className="text-zinc-300 flex items-center gap-1.5 uppercase font-black text-[10px] tracking-wider pl-2">
+                  <Sliders className="h-4 w-4 text-amber-400" /> Active Sub-Mode:
+                </span>
+                <div className="flex gap-1.5">
+                  <button type="button" onClick={() => { setEditorSubMode("Layout Designer"); showToast("Design Mode: Layout active."); }} className={`px-3 py-1.5 rounded text-[10px] font-black uppercase transition ${editorSubMode === "Layout Designer" ? "bg-amber-400 text-zinc-950" : "text-zinc-400 bg-zinc-950"}`}>Layout Designer 📐</button>
+                  <button type="button" onClick={() => { setEditorSubMode("Text Editor"); showToast("Text Mode: Inline active."); }} className={`px-3 py-1.5 rounded text-[10px] font-black uppercase transition ${editorSubMode === "Text Editor" ? "bg-indigo-600 text-white" : "text-zinc-400 bg-zinc-950"}`}>Text Editor ✍️</button>
+                </div>
+              </div>
+            )}
+
+            {/* INTEGRATED OFFICE DRAWER CMS CORE BOX */}
             {isEditorMode && (
-              <section className="bg-zinc-900 border-2 border-amber-400/80 rounded-2xl shadow-xl overflow-hidden">
+              <section className="bg-zinc-900 border-2 border-amber-400/80 rounded-2xl shadow-xl overflow-hidden" id="editor-cms-control-panel">
                 <button type="button" onClick={() => setIsContentDeskOpen(!isContentDeskOpen)} className="w-full flex flex-col sm:flex-row justify-between items-start sm:items-center p-6 bg-zinc-900 hover:bg-zinc-850 transition text-left gap-4">
                   <div className="flex items-center gap-3">
                     <Shield className="h-6 w-6 text-amber-400" />
@@ -642,13 +824,15 @@ export default function App() {
                       <h2 className="font-serif text-lg font-black text-zinc-100 uppercase tracking-tight flex items-center gap-2">
                         Staff HQ &amp; Editorial Desk
                         <span className="text-[10px] font-mono bg-amber-400 text-zinc-950 px-2 py-0.5 rounded-sm">
-                          {isContentDeskOpen ? "Minimize Panel" : "Expand Content Panel"}
+                          {isContentDeskOpen ? "Open" : "Minimized (Open Content Desk)"}
                         </span>
                       </h2>
                     </div>
                   </div>
-                  <div className="bg-zinc-950 px-3 py-1.5 border border-zinc-800 rounded-lg text-xs font-mono">
-                    <span className="font-extrabold text-amber-400">{pendingReviews.length} stories in submission review</span>
+                  <div className="flex items-center gap-3 text-xs font-mono">
+                    <div className="bg-zinc-950 px-3 py-1.5 border border-zinc-800 rounded-lg">
+                      <span className="font-extrabold text-amber-400">{pendingReviews.length} pending reviews</span>
+                    </div>
                   </div>
                 </button>
 
@@ -656,125 +840,48 @@ export default function App() {
                   <div className="p-6 border-t border-zinc-800 space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       
-                      {/* SUB SECTION A: INBOX QUEUE ACCUMULATOR */}
+                      {/* SUB SECTION A: REVIEW COMPILING ACCUMULATOR */}
                       <div className="bg-zinc-950 p-4 border border-zinc-805 rounded-xl space-y-3">
-                        <span className="text-xs font-mono font-bold uppercase text-zinc-300 flex items-center gap-1"><Inbox className="h-4 w-4" /> Submission Queue</span>
+                        <span className="text-xs font-mono font-bold uppercase text-zinc-300 flex items-center gap-1"><Inbox className="h-4 w-4" /> Queue Deck</span>
                         {pendingReviews.length > 0 ? (
-                          <div className="space-y-2 max-h-[350px] overflow-y-auto">
+                          <div className="space-y-2 max-h-[290px] overflow-y-auto">
                             {pendingReviews.map((sub) => (
-                              <div key={sub.id} className="p-3 rounded-lg border text-left bg-zinc-900 border-zinc-800">
+                              <div key={sub.id} className={`p-3 rounded-lg border text-left ${editingReviewId === sub.id ? "bg-amber-400/10 border-amber-400" : "bg-zinc-900 border-zinc-800"}`}>
                                 <h4 className="font-serif text-sm font-bold text-zinc-200 line-clamp-1">{sub.headline}</h4>
-                                <p className="text-[10px] text-zinc-400 mt-1 line-clamp-2">{sub.paragraphs[0]}</p>
-                                <button 
-                                  type="button" 
-                                  onClick={() => {
-                                    setEditorFormHeadline(sub.headline);
-                                    setEditorFormSubheading(sub.subheading || "");
-                                    setEditorFormByline(sub.byline);
-                                    setEditorFormBodyText(sub.paragraphs.join("\n\n"));
-                                    setEditorFormCategory(sub.category);
-                                    setEditorFormTags(sub.tags || ["Featured"]);
-                                    setPendingReviews(prev => prev.filter(p => p.id !== sub.id));
-                                    showToast("Loaded entry into live workspace composer!");
-                                  }} 
-                                  className="mt-3 bg-amber-400 text-zinc-900 font-mono text-[9px] font-black uppercase px-2.5 py-1.5 rounded-sm"
-                                >
-                                  Load To Workspace &rarr;
-                                </button>
+                                <button type="button" onClick={() => handleStartReviewEdit(sub)} className="mt-2 bg-amber-400 text-zinc-900 font-mono text-[9px] font-black uppercase px-2.5 py-1.5 rounded-sm">Edit &amp; Publish &rarr;</button>
                               </div>
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs font-serif text-zinc-500 italic text-center py-6">All public submission records cleared.</p>
+                          <p className="text-xs font-serif text-zinc-500 italic text-center py-6">All review operations cleared.</p>
                         )}
                       </div>
 
-                      {/* SUB SECTION B: LIVE COMPOSER UNIT */}
+                      {/* SUB SECTION B: CORE CREATIVE ARTICLE DISPATCH COMPOSER */}
                       <div className="bg-zinc-950 p-4 border border-zinc-800 rounded-xl space-y-4">
-                        <span className="text-xs font-mono font-bold uppercase text-zinc-300 flex items-center gap-1"><Layout className="h-4 w-4" /> Workspace Live Composer</span>
+                        <span className="text-xs font-mono font-bold uppercase text-zinc-300 flex items-center gap-1"><Layout className="h-4 w-4" /> Live Composer</span>
                         <form onSubmit={handleGeneralSubmitStory} className="space-y-3 text-xs text-left">
-                          <input type="text" required placeholder="Story Title Headline..." value={editorFormHeadline} onChange={(e) => setEditorFormHeadline(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-zinc-200 rounded" />
-                          <input type="text" required placeholder="Author Byline..." value={editorFormByline} onChange={(e) => setEditorFormByline(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-zinc-200 rounded" />
-                          <input type="text" placeholder="Supporting Subheading Teaser text..." value={editorFormSubheading} onChange={(e) => setEditorFormSubheading(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-zinc-200 rounded" />
+                          <input type="text" required placeholder="Story Headline Title..." value={editorFormHeadline} onChange={(e) => setEditorFormHeadline(e.target.value)} className="w-full bg-zinc-900 border border-zinc-850 p-2 text-zinc-200" />
+                          <input type="text" required placeholder="Author Credit Byline..." value={editorFormByline} onChange={(e) => setEditorFormByline(e.target.value)} className="w-full bg-zinc-900 border border-zinc-850 p-2 text-zinc-200" />
                           
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1 font-bold">Primary Classification Section</label>
-                              <select value={editorFormCategory} onChange={(e) => setEditorFormCategory(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-zinc-200 rounded">
-                                {availableCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1 font-bold">Quick Cover Image File</label>
-                              <label className="flex items-center justify-center h-9 border border-zinc-800 bg-zinc-900 rounded cursor-pointer text-center hover:bg-zinc-850 transition">
-                                <span className="font-mono text-[10px] text-zinc-400 uppercase tracking-tight line-clamp-1 px-2">
-                                  {editorFormImageUrl ? "✓ Staged" : "Choose Image File"}
-                                </span>
+                          {/* UPGRADED LOCAL IMAGE FILE UPLOADER */}
+                          <div className="space-y-1">
+                            <label className="block text-[10px] uppercase font-mono text-zinc-450 font-bold">Illustration Thumbnail Asset Selection</label>
+                            <div className="flex items-center justify-center w-full">
+                              <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-zinc-800 rounded-lg cursor-pointer bg-zinc-900 hover:bg-zinc-850 transition">
+                                <div className="flex flex-col items-center justify-center pt-3 pb-3">
+                                  <Upload className="h-5 w-5 text-zinc-500 mb-1" />
+                                  <p className="text-[10px] font-mono text-zinc-400 uppercase tracking-tight">
+                                    {editorFormImageUrl ? "✓ Local Graphic Staged" : "Choose local image file"}
+                                  </p>
+                                </div>
                                 <input type="file" accept="image/*" className="hidden" onChange={handleImageUploadChange} />
                               </label>
                             </div>
                           </div>
 
-                          {/* MASTER TAGS MANAGEMENT FIELD UNIT */}
-                          <div className="bg-zinc-900 p-2.5 border border-zinc-800 rounded space-y-2">
-                            <label className="block text-[10px] uppercase font-mono text-amber-400 font-bold">Manage Article Indexing Tags</label>
-                            
-                            <div className="flex flex-wrap gap-1">
-                              {editorFormTags.map(t => (
-                                <span key={t} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono ${t === 'Front Page' ? 'bg-amber-400 text-zinc-950 font-bold' : 'bg-zinc-800 text-zinc-200'}`}>
-                                  {t}
-                                  <button type="button" onClick={() => setEditorFormTags(prev => prev.filter(tag => tag !== t))} className="hover:text-red-400 font-black text-[9px] ml-1">×</button>
-                                </span>
-                              ))}
-                            </div>
-
-                            <div className="flex gap-2">
-                              <input 
-                                type="text" 
-                                placeholder="Add custom tag string..." 
-                                value={composerTagInput} 
-                                onChange={(e) => setComposerTagInput(e.target.value)} 
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    if (composerTagInput.trim() && !editorFormTags.includes(composerTagInput.trim())) {
-                                      setEditorFormTags([...editorFormTags, composerTagInput.trim()]);
-                                      setComposerTagInput("");
-                                    }
-                                  }
-                                }}
-                                className="flex-1 bg-zinc-950 border border-zinc-800 p-1 px-2 text-zinc-200 rounded text-[11px]" 
-                              />
-                              <button 
-                                type="button" 
-                                onClick={() => {
-                                  if (composerTagInput.trim() && !editorFormTags.includes(composerTagInput.trim())) {
-                                    setEditorFormTags([...editorFormTags, composerTagInput.trim()]);
-                                    setComposerTagInput("");
-                                  }
-                                }} 
-                                className="bg-zinc-800 border border-zinc-700 px-3 py-1 rounded font-mono font-bold text-[10px] text-zinc-200"
-                              >
-                                Add
-                              </button>
-                            </div>
-
-                            <div className="pt-1 flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const updated = validateAndToggleFrontPageTag(editorFormTags);
-                                  setEditorFormTags(updated);
-                                }}
-                                className={`text-[10px] font-mono px-2 py-1 rounded border transition ${editorFormTags.includes("Front Page") ? "bg-amber-400 text-zinc-950 border-amber-500 font-bold" : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200"}`}
-                              >
-                                {editorFormTags.includes("Front Page") ? "★ Front Page Pinned" : "☆ Pin to Front Page"}
-                              </button>
-                            </div>
-                          </div>
-
-                          <textarea rows={4} required placeholder="Compose full narrative content copy blocks..." value={editorFormBodyText} onChange={(e) => setEditorFormBodyText(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2 text-zinc-200 font-serif rounded" />
-                          <button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-mono font-black py-2.5 uppercase tracking-wider rounded">Publish Live to Circulation &rarr;</button>
+                          <textarea rows={4} required placeholder="Compose master body text..." value={editorFormBodyText} onChange={(e) => setEditorFormBodyText(e.target.value)} className="w-full bg-zinc-900 border border-zinc-850 p-2 text-zinc-200 font-serif" />
+                          <button type="submit" className="w-full bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-mono font-black py-2 uppercase tracking-wider">Publish Entry &rarr;</button>
                         </form>
                       </div>
 
@@ -784,94 +891,156 @@ export default function App() {
               </section>
             )}
 
-            {/* TAB PANELS A: REVITALIZED HOME PORTAL PREVIEW */}
+            {/* TAB CONTENT HOOKS A: HOMEPAGE WITH FRONT PREVIEW BOARD CANVAS */}
             {currentTab === "home" && (
-              <div className="space-y-10 animate-in fade-in duration-200">
-                
-                {/* BRAND NEW REVITALIZED FRONT PAGE 3-SLOT GRID HOOKS */}
+              <div className="space-y-8 animate-in fade-in duration-200">
                 <section className="space-y-4 text-left">
-                  <div className="border-b-2 border-double border-zinc-800 pb-1.5">
-                    <h2 className="font-title text-4xl font-normal text-zinc-100 tracking-wide uppercase text-center md:text-left flex items-center gap-2 justify-center md:justify-start">
-                      <Sparkles className="h-6 w-6 text-amber-400" /> Marquee Front Page Columns
-                    </h2>
-                    <p className="text-[10px] font-mono uppercase text-zinc-500 tracking-widest text-center md:text-left mt-0.5">Top stories curated dynamically via index parameters</p>
-                  </div>
-
-                  {frontPageArticles.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      {frontPageArticles.map((article, index) => (
-                        <div 
-                          key={article.id} 
-                          className={`bg-zinc-900 border rounded-2xl overflow-hidden p-5 flex flex-col justify-between transition group hover:border-amber-400/40 relative ${
-                            index === 0 ? "md:border-r-2 border-zinc-800" : ""
-                          }`}
-                        >
+                  
+                  {/* SLOTS LAYOUT CONTAINER GRID SECTION */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-5" id="drag-drop-slots-grid">
+                    
+                    {/* POSITION 1: MARQUEE HERO BOX */}
+                    <div 
+                      onDragOver={(e) => { e.preventDefault(); if (isEditorMode) setIsHeroDraggingOver(true); }}
+                      onDragLeave={() => { if (isEditorMode) setIsHeroDraggingOver(false); }}
+                      onDrop={(e) => { if (isEditorMode) { handleSlotDrop(e, "hero"); setIsHeroDraggingOver(false); } }}
+                      className={`md:col-span-7 rounded-2xl p-1 transition overflow-hidden border ${isEditorMode && editorSubMode === "Layout Designer" ? isHeroDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60" : "bg-zinc-900 border-zinc-800"}`}
+                    >
+                      {slottedHero ? (
+                        <div className="relative group p-5 h-full flex flex-col justify-between">
                           <div className="space-y-3">
-                            <div className="flex justify-between items-center">
-                              <span className="bg-amber-400/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider">
-                                {article.category}
-                              </span>
-                              <span className="text-[10px] font-mono font-bold text-amber-400 uppercase flex items-center gap-0.5">
-                                ★ Front Slot {index + 1}
-                              </span>
-                            </div>
-
-                            {/* Text editable hooks inside front slots if editor role triggers active */}
-                            <h3 
-                              contentEditable={isEditorMode}
+                            <span className="inline-block rounded-md bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-400">{slottedHero.category}</span>
+                            
+                            {/* UNLOCKED INLINE TEXT HEADER ELEMENT */}
+                            <h2 
+                              contentEditable={isEditorMode && editorSubMode === "Text Editor"}
                               suppressContentEditableWarning={true}
-                              onBlur={(e) => handleInlineTextSave(article.id, "headline", e.currentTarget.innerText)}
-                              onClick={(e) => { if (isEditorMode) e.stopPropagation(); else setSelectedArticle(article); }}
-                              className={`font-serif text-xl font-black text-zinc-100 leading-tight focus:outline-none rounded transition ${isEditorMode ? "border border-dashed border-amber-400/70 bg-zinc-950/50 p-1 cursor-text" : "group-hover:text-amber-400 cursor-pointer"}`}
+                              onBlur={(e) => handleInlineTextSave(slottedHero.id, "headline", e.currentTarget.innerText)}
+                              onClick={(e) => { if (isEditorMode && editorSubMode === "Text Editor") e.stopPropagation(); else setSelectedArticle(slottedHero); }}
+                              className={`font-serif text-2xl sm:text-3xl font-black text-zinc-100 leading-tight transition focus:outline-none rounded ${isEditorMode && editorSubMode === "Text Editor" ? "border border-dashed border-amber-400 bg-zinc-950/40 p-1 cursor-text" : "group-hover:text-amber-400"}`}
                             >
-                              {article.headline}
-                            </h3>
+                              {slottedHero.headline}
+                            </h2>
 
+                            {/* UNLOCKED INLINE SUBHEADING BLOCK */}
                             <p 
-                              contentEditable={isEditorMode}
+                              contentEditable={isEditorMode && editorSubMode === "Text Editor"}
                               suppressContentEditableWarning={true}
-                              onBlur={(e) => handleInlineTextSave(article.id, "subheading", e.currentTarget.innerText)}
-                              onClick={(e) => { if (isEditorMode) e.stopPropagation(); }}
-                              className={`text-xs text-zinc-400 font-sans leading-relaxed focus:outline-none rounded ${isEditorMode ? "border border-dashed border-amber-400/50 bg-zinc-950/40 p-1 cursor-text" : ""}`}
+                              onBlur={(e) => handleInlineTextSave(slottedHero.id, "subheading", e.currentTarget.innerText)}
+                              onClick={(e) => { if (isEditorMode && editorSubMode === "Text Editor") e.stopPropagation(); }}
+                              className={`text-xs text-zinc-400 font-sans leading-relaxed focus:outline-none rounded ${isEditorMode && editorSubMode === "Text Editor" ? "border border-dashed border-amber-400/60 bg-zinc-950/40 p-1 cursor-text" : ""}`}
                             >
-                              {article.subheading || "No accompanying description text context specified."}
+                              {slottedHero.subheading || "No supporting deck context assigned."}
                             </p>
 
-                            {article.imageUrl && (
-                              <div className="overflow-hidden rounded-xl h-40 border border-zinc-800/80 my-2 shadow-inner">
-                                <img src={article.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition duration-500" alt="Column asset" />
+                            {slottedHero.imageUrl && (
+                              <div className="overflow-hidden rounded-lg max-h-[190px] border border-zinc-800 my-2">
+                                <img src={slottedHero.imageUrl} className="w-full h-full object-cover" alt="Hero asset" />
                               </div>
                             )}
                           </div>
-
-                          <div className="mt-4 pt-3 border-t border-zinc-800 flex justify-between items-center text-[11px] text-zinc-400 font-mono">
-                            <span className="truncate max-w-[140px]">By {article.byline}</span>
-                            <button onClick={() => setSelectedArticle(article)} className="text-amber-400 font-bold hover:underline shrink-0">Open Column &rarr;</button>
+                          <div className="mt-4 pt-3 border-t border-zinc-800 flex justify-between items-center text-xs text-zinc-400 font-mono">
+                            <span>By: {slottedHero.byline}</span>
+                            <button onClick={() => setSelectedArticle(slottedHero)} className="text-amber-400 font-bold flex items-center gap-1">Read Beat &rarr;</button>
                           </div>
                         </div>
-                      ))}
-
-                      {/* Display dummy layouts if fewer than 3 are pinned */}
-                      {Array.from({ length: 3 - frontPageArticles.length }).map((_, i) => (
-                        <div key={i} className="border-2 border-dashed border-zinc-800 bg-zinc-950/20 rounded-2xl p-6 flex flex-col items-center justify-center text-center py-16">
-                          <BookOpen className="h-7 w-7 text-zinc-700 mb-2 animate-pulse" />
-                          <h4 className="font-mono text-[10px] uppercase font-extrabold text-zinc-500">Front Page Slot {frontPageArticles.length + i + 1} Unassigned</h4>
-                          <p className="text-[10px] font-mono text-zinc-600 max-w-[180px] leading-normal mt-1">Go to the Archives tab under Editor mode to toggle the 'Front Page' tag parameter for an article.</p>
+                      ) : (
+                        /* HERO FALLBACK STATE SLATE */
+                        <div className="flex flex-col items-center justify-center p-12 text-center h-full min-h-[300px] border-2 border-dashed border-zinc-800 bg-zinc-950/35 rounded-xl">
+                          <Layout className="h-8 w-8 text-zinc-700 mb-2 animate-pulse" />
+                          <h4 className="font-mono text-xs uppercase font-bold text-amber-500 tracking-wider">Slot 1 (Hero)</h4>
+                          <p className="text-[11px] font-mono text-zinc-500 max-w-xs leading-normal">
+                            EMPTY HERO SLOT - Drag a featured story card here from the cabinet sidebar to activate the front page.
+                          </p>
                         </div>
-                      ))}
+                      )}
                     </div>
-                  ) : (
-                    <div className="py-12 bg-zinc-900 border border-dashed border-zinc-800 rounded-xl text-center font-serif italic text-xs text-zinc-500">
-                      No front page columns curated. Go into Editor Mode and flag up to 3 articles with the 'Front Page' index tag.
+
+                    {/* RIGHT COLUMN INTERCEPT SIDE: SECONDARY & SUB-FEATURE DECKS */}
+                    <div className="md:col-span-5 flex flex-col gap-4">
+                      
+                      {/* POSITION 2: SECONDARY SLOT GRID TARGET */}
+                      <div 
+                        onDragOver={(e) => { e.preventDefault(); if (isEditorMode) setIsSecondaryDraggingOver(true); }}
+                        onDragLeave={() => { if (isEditorMode) setIsSecondaryDraggingOver(false); }}
+                        onDrop={(e) => { if (isEditorMode) { handleSlotDrop(e, "secondary"); setIsSecondaryDraggingOver(false); } }}
+                        className={`rounded-2xl p-5 transition flex-1 flex flex-col justify-between border ${isEditorMode && editorSubMode === "Layout Designer" ? isSecondaryDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60" : "bg-zinc-900 border-zinc-800"}`}
+                      >
+                        {slottedSecondary ? (
+                          <div className="relative group space-y-3 h-full flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <span className="text-[9px] font-mono bg-emerald-400/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 inline-block">{slottedSecondary.category}</span>
+                              
+                              <h3 
+                                contentEditable={isEditorMode && editorSubMode === "Text Editor"}
+                                suppressContentEditableWarning={true}
+                                onBlur={(e) => handleInlineTextSave(slottedSecondary.id, "headline", e.currentTarget.innerText)}
+                                onClick={(e) => { if (isEditorMode && editorSubMode === "Text Editor") e.stopPropagation(); else setSelectedArticle(slottedSecondary); }}
+                                className={`font-serif text-lg font-bold text-zinc-100 focus:outline-none rounded ${isEditorMode && editorSubMode === "Text Editor" ? "border border-dashed border-amber-400 bg-zinc-950/40 p-0.5 cursor-text" : "group-hover:text-amber-400"}`}
+                              >
+                                {slottedSecondary.headline}
+                              </h3>
+                              <p className="text-[11px] text-zinc-500 font-mono italic">By {slottedSecondary.byline}</p>
+                            </div>
+                            <button onClick={() => setSelectedArticle(slottedSecondary)} className="text-[11px] text-zinc-300 font-bold flex items-center gap-1">Open Story &rarr;</button>
+                          </div>
+                        ) : (
+                          /* SECONDARY FALLBACK LAYER */
+                          <div className="flex flex-col items-center justify-center p-6 text-center h-full min-h-[140px] border-2 border-dashed border-zinc-800 bg-zinc-950/35 rounded-xl">
+                            <Newspaper className="h-6 w-6 text-zinc-700 mb-1" />
+                            <h4 className="font-mono text-[10px] uppercase font-bold text-amber-500 tracking-wider">Slot 2 (Secondary)</h4>
+                            <p className="text-[10px] font-mono text-zinc-500 max-w-xs leading-snug">
+                              EMPTY SECONDARY FEATURE - Drag a supporting story card here.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* POSITION 3: SUB-FEATURE TRACK COMPONENT */}
+                      <div 
+                        onDragOver={(e) => { e.preventDefault(); if (isEditorMode) setIsSubFeatureDraggingOver(true); }}
+                        onDragLeave={() => { if (isEditorMode) setIsSubFeatureDraggingOver(false); }}
+                        onDrop={(e) => { if (isEditorMode) { handleSlotDrop(e, "subFeature"); setIsSubFeatureDraggingOver(false); } }}
+                        className={`rounded-2xl p-5 transition flex-1 flex flex-col justify-between border ${isEditorMode && editorSubMode === "Layout Designer" ? isSubFeatureDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60" : "bg-zinc-900 border-zinc-800"}`}
+                      >
+                        {slottedSubFeature ? (
+                          <div className="relative group space-y-3 h-full flex flex-col justify-between">
+                            <div className="space-y-1.5">
+                              <span className="text-[9px] font-mono bg-sky-400/10 text-sky-400 px-2 py-0.5 rounded border border-sky-500/20 inline-block">{slottedSubFeature.category}</span>
+                              
+                              <h3 
+                                contentEditable={isEditorMode && editorSubMode === "Text Editor"}
+                                suppressContentEditableWarning={true}
+                                onBlur={(e) => handleInlineTextSave(slottedSubFeature.id, "headline", e.currentTarget.innerText)}
+                                onClick={(e) => { if (isEditorMode && editorSubMode === "Text Editor") e.stopPropagation(); else setSelectedArticle(slottedSubFeature); }}
+                                className={`font-serif text-md font-extrabold text-zinc-200 line-clamp-2 focus:outline-none rounded ${isEditorMode && editorSubMode === "Text Editor" ? "border border-dashed border-amber-400 bg-zinc-950/40 p-0.5 cursor-text" : "group-hover:text-amber-400"}`}
+                              >
+                                {slottedSubFeature.headline}
+                              </h3>
+                            </div>
+                            <button onClick={() => setSelectedArticle(slottedSubFeature)} className="text-[10px] text-zinc-400 flex items-center gap-1">Explore Report &rarr;</button>
+                          </div>
+                        ) : (
+                          /* SUB-FEATURE FALLBACK CARD */
+                          <div className="flex flex-col items-center justify-center p-6 text-center h-full min-h-[140px] border-2 border-dashed border-zinc-800 bg-zinc-950/35 rounded-xl">
+                            <BookOpen className="h-6 w-6 text-zinc-700 mb-1" />
+                            <h4 className="font-mono text-[10px] uppercase font-bold text-amber-500 tracking-wider">Slot 3 (Sub-Feature)</h4>
+                            <p className="text-[10px] font-mono text-zinc-500 max-w-xs leading-snug">
+                              EMPTY SUB-FEATURE GRID - Drop an article card here to format.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
                     </div>
-                  )}
+                  </div>
                 </section>
 
-                {/* GENERAL CIRCULATION REVOLVING FEED LIST */}
+                {/* VISUAL NEWSSTAND MAIN GENERAL ARCHIVE RENDER */}
                 <section className="space-y-4 text-left">
                   <div className="border-b border-zinc-800 pb-2 flex justify-between items-end">
-                    <h3 className="font-serif text-sm font-black text-zinc-300 uppercase tracking-widest">Secondary Circulation Feed</h3>
-                    <span className="text-[10px] font-mono text-zinc-500">{displayedFeedArticles.length} matching entries indexed</span>
+                    <h3 className="font-serif text-md font-bold text-zinc-200 uppercase tracking-widest">Index Circulation Feed</h3>
+                    <span className="text-[10px] font-mono text-zinc-500">{displayedFeedArticles.length} tracks cataloged</span>
                   </div>
                   {displayedFeedArticles.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="editorial-main-articles-grid">
@@ -880,13 +1049,13 @@ export default function App() {
                       ))}
                     </div>
                   ) : (
-                    <div className="py-12 bg-zinc-900/40 border border-dashed border-zinc-800 text-center rounded-xl p-4 text-zinc-500 font-serif text-xs italic">No secondary circulation entries match current classification parameters.</div>
+                    <div className="py-12 bg-zinc-900/40 border border-dashed border-zinc-800 text-center rounded-xl p-4 text-zinc-500 font-serif text-xs italic">No secondary entries match filter sections.</div>
                   )}
                 </section>
               </div>
             )}
 
-            {/* TAB PANELS B: REVOLUTIONIZED ARCHIVE RECORD MANAGER LEDGER */}
+            {/* TAB CONTENT HOOKS B: HISTORICAL MASTER DATA LEDGER GRID */}
             {currentTab === "archive" && (
               <section className="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 space-y-6 text-left animate-in fade-in duration-200">
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-zinc-800 pb-4 gap-4">
@@ -901,174 +1070,46 @@ export default function App() {
 
                 <div className="relative">
                   <Search className="h-4 w-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input type="text" placeholder="Query archive ledger documents..." value={archiveSearch} onChange={(e) => setArchiveSearch(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-xs text-zinc-200" />
+                  <input type="text" placeholder="Query archive database files..." value={archiveSearch} onChange={(e) => setArchiveSearch(e.target.value)} className="w-full bg-zinc-950 border border-zinc-800 rounded-lg pl-9 pr-4 py-2 text-xs text-zinc-200" />
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs text-zinc-300 min-w-[650px] border-collapse">
+                  <table className="w-full text-left text-xs text-zinc-300 min-w-[600px] border-collapse">
                     <thead>
                       <tr className="border-b border-zinc-800 text-[10px] font-mono uppercase text-zinc-500">
                         <th className="py-2.5 px-3">Date</th>
                         <th className="py-2.5 px-3">Headline Title</th>
-                        <th className="py-2.5 px-3">Section &amp; Tags Mapping parameters</th>
+                        <th className="py-2.5 px-3">Section</th>
                         <th className="py-2.5 px-3">Reporter</th>
                         <th className="py-2.5 px-3 text-right">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {getSortedAndFilteredArchive().map((art) => {
-                        const isCurrentlyEditingThis = tagEditingArticleId === art.id;
-                        return (
-                          <React.Fragment key={art.id}>
-                            <tr className="border-b border-zinc-850 hover:bg-zinc-950/40 transition cursor-pointer">
-                              <td className="py-3 px-3 font-mono text-amber-400 whitespace-nowrap" onClick={() => setSelectedArticle(art)}>{formatDatePretty(art.date)}</td>
-                              <td className="py-3 px-3 font-serif font-bold text-zinc-100 max-w-xs" onClick={() => setSelectedArticle(art)}>{art.headline}</td>
-                              <td className="py-3 px-3" onClick={() => setSelectedArticle(art)}>
-                                <div className="flex flex-wrap gap-1 items-center">
-                                  <span className="bg-amber-400/20 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase">{art.category}</span>
-                                  {(art.tags || []).map((t, idx) => (
-                                    <span key={idx} className={`px-1.5 py-0.5 rounded text-[9px] font-mono ${t === 'Front Page' ? 'bg-amber-400 text-zinc-950 font-bold' : 'bg-zinc-800 text-zinc-400'}`}>
-                                      {t}
-                                    </span>
-                                  ))}
-                                </div>
-                              </td>
-                              <td className="py-3 px-3 font-mono text-zinc-400 whitespace-nowrap" onClick={() => setSelectedArticle(art)}>{art.byline}</td>
-                              <td className="py-3 px-3 text-right whitespace-nowrap">
-                                <div className="flex justify-end gap-1.5 items-center">
-                                  {isEditorMode && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (isCurrentlyEditingThis) {
-                                          setTagEditingArticleId(null);
-                                        } else {
-                                          setTagEditingArticleId(art.id);
-                                          setEditingArticleCategory(art.category);
-                                          setEditingArticleTags(art.tags || []);
-                                        }
-                                      }}
-                                      className={`p-1.5 rounded border transition ${isCurrentlyEditingThis ? 'bg-amber-400 text-zinc-950 border-amber-500' : 'bg-zinc-950 border-zinc-800 text-zinc-300 hover:border-zinc-700'}`}
-                                      title="Modify tags configuration parameters"
-                                    >
-                                      <Edit3 className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
-                                  
-                                  {isEditorMode && (
-                                    <button
-                                      type="button"
-                                      onClick={(e) => { e.stopPropagation(); handleDeleteArticle(art.id); }}
-                                      className="p-1.5 rounded bg-red-950/30 hover:bg-red-900/50 text-red-400 border border-red-900/30 transition"
-                                      title="Permanently remove entry from registry 🗑"
-                                    >
-                                      <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
-                                  )}
-                                  <span onClick={() => setSelectedArticle(art)} className="bg-zinc-850 border border-zinc-800 px-2 py-1 rounded text-[9px] font-mono tracking-tight hover:text-white transition">Open &rarr;</span>
-                                </div>
-                              </td>
-                            </tr>
-
-                            {/* COLLAPSIBLE ROW SUB PANEL COMPONENT FOR TAG AND CLASSIFICATION EDITING */}
-                            {isEditorMode && isCurrentlyEditingThis && (
-                              <tr className="bg-zinc-950/80 border-b border-zinc-800">
-                                <td colSpan={5} className="p-4 space-y-4">
-                                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-4 space-y-3 max-w-2xl text-left">
-                                    <h4 className="font-mono text-[11px] text-amber-400 uppercase font-black tracking-wide flex items-center gap-1">
-                                      <Tag className="h-3.5 w-3.5" /> Modify Classification Parameters &amp; Indices
-                                    </h4>
-                                    
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                                      <div>
-                                        <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1 font-bold">Primary Circulation Section</label>
-                                        <select 
-                                          value={editingArticleCategory} 
-                                          onChange={(e) => setEditingArticleCategory(e.target.value)}
-                                          className="w-full bg-zinc-950 border border-zinc-800 p-2 text-zinc-200 rounded font-mono"
-                                        >
-                                          {availableCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                                        </select>
-                                      </div>
-
-                                      <div>
-                                        <label className="block text-[10px] uppercase font-mono text-zinc-400 mb-1 font-bold">Quick Tag Controls</label>
-                                        <div className="pt-1">
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const updated = validateAndToggleFrontPageTag(editingArticleTags, art.id);
-                                              setEditingArticleTags(updated);
-                                            }}
-                                            className={`w-full text-left font-mono text-[10px] px-3 py-2 rounded border transition flex items-center justify-between ${editingArticleTags.includes("Front Page") ? "bg-amber-400 text-zinc-950 border-amber-500 font-bold" : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200"}`}
-                                          >
-                                            <span>{editingArticleTags.includes("Front Page") ? "★ Front Page Curated Column" : "☆ Nominate to Front Page Grid"}</span>
-                                            <span className="text-[9px] bg-zinc-900/10 px-1.5 py-0.5 rounded">Max 3</span>
-                                          </button>
-                                        </div>
-                                      </div>
-                                    </div>
-
-                                    {/* DETAILED MANAGE TAGS ACCUMULATOR INTERFACE */}
-                                    <div className="space-y-1.5 text-xs">
-                                      <label className="block text-[10px] uppercase font-mono text-zinc-400 font-bold">Active Tags Register</label>
-                                      <div className="flex flex-wrap gap-1.5 bg-zinc-950 p-2 border border-zinc-800 rounded min-h-[36px]">
-                                        {editingArticleTags.length > 0 ? (
-                                          editingArticleTags.map(tag => (
-                                            <span key={tag} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono ${tag === 'Front Page' ? 'bg-amber-400 text-zinc-950 font-bold' : 'bg-zinc-800 text-zinc-300'}`}>
-                                              {tag}
-                                              <button type="button" onClick={() => setEditingArticleTags(prev => prev.filter(t => t !== tag))} className="text-[10px] font-black hover:text-red-400 ml-1">×</button>
-                                            </span>
-                                          ))
-                                        ) : (
-                                          <span className="text-[10px] text-zinc-600 font-mono italic">No indexing tags assigned.</span>
-                                        )}
-                                      </div>
-
-                                      <div className="flex gap-2">
-                                        <input 
-                                          type="text" 
-                                          placeholder="Type a tag string and hit add..." 
-                                          value={newTagInput} 
-                                          onChange={(e) => setNewTagInput(e.target.value)} 
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                              e.preventDefault();
-                                              if (newTagInput.trim() && !editingArticleTags.includes(newTagInput.trim())) {
-                                                setEditingArticleTags([...editingArticleTags, newTagInput.trim()]);
-                                                setNewTagInput("");
-                                              }
-                                            }
-                                          }}
-                                          className="flex-1 bg-zinc-950 border border-zinc-800 p-1.5 px-2.5 text-zinc-200 rounded font-mono text-[11px]" 
-                                        />
-                                        <button 
-                                          type="button" 
-                                          onClick={() => {
-                                            if (newTagInput.trim() && !editingArticleTags.includes(newTagInput.trim())) {
-                                              setEditingArticleTags([...editingArticleTags, newTagInput.trim()]);
-                                              setNewTagInput("");
-                                            }
-                                          }} 
-                                          className="bg-zinc-800 hover:bg-zinc-750 border border-zinc-700 px-4 rounded font-mono font-bold text-[10px]"
-                                        >
-                                          Add Tag
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
-                                      <button type="button" onClick={() => setTagEditingArticleId(null)} className="px-3 py-1.5 font-mono text-[10px] text-zinc-500 hover:text-zinc-400 uppercase font-bold">Cancel</button>
-                                      <button type="button" onClick={() => handleSaveArticleTagsAndCategory(art.id)} className="bg-amber-400 text-zinc-950 px-4 py-1.5 font-mono text-[10px] font-black uppercase tracking-wide rounded">Save Structural Changes</button>
-                                    </div>
-                                  </div>
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
+                      {getSortedAndFilteredArchive().map((art) => (
+                        <tr key={art.id} onClick={() => setSelectedArticle(art)} className="border-b border-zinc-850 hover:bg-zinc-950/40 transition cursor-pointer">
+                          <td className="py-3 px-3 font-mono text-amber-400">{formatDatePretty(art.date)}</td>
+                          <td className="py-3 px-3 font-serif font-bold text-zinc-100">{art.headline}</td>
+                          <td className="py-3 px-3"><span className="bg-zinc-800 px-2 py-0.5 rounded text-[9px] font-mono text-zinc-300 uppercase">{art.category}</span></td>
+                          <td className="py-3 px-3 font-mono text-zinc-400">{art.byline}</td>
+                          <td className="py-3 px-3 text-right">
+                            <div className="flex justify-end gap-2 items-center">
+                              <span className="bg-zinc-850 px-2 py-1 rounded text-[9px] font-mono">Open &rarr;</span>
+                              
+                              {/* ACTIVE DATA ROW REMOVAL HOOK */}
+                              {isEditorMode && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteArticle(art.id); }}
+                                  className="p-1.5 rounded bg-red-950/30 hover:bg-red-900/50 text-red-400 border border-red-900/30 transition"
+                                  title="Permanently remove entry from database 🗑"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -1077,10 +1118,59 @@ export default function App() {
 
           </main>
 
+          {/* COLUMN 3: Right Drag Pool Cabinet Workspace Sidebar Panel */}
+          {isEditorMode && currentTab === "home" ? (
+            <aside className="lg:col-span-3 space-y-6 bg-zinc-950/50 p-4 rounded-2xl border border-zinc-850 text-left" id="homepage-editor-storypool">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                  <span className="text-xs font-mono font-bold uppercase text-amber-400 flex items-center gap-1.5"><Layers className="h-4 w-4" /> Story Cabinet Pool</span>
+                </div>
+                <p className="text-[9px] font-mono text-zinc-400 uppercase leading-snug">Drag stories below into layout wireframes leftward:</p>
+                
+                <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+                  {articles.map((article) => {
+                    const isHero = pageSlots.heroId === article.id;
+                    const isSec = pageSlots.secondaryId === article.id;
+                    const isSub = pageSlots.subFeatureId === article.id;
+                    const isSlotted = isHero || isSec || isSub;
+                    const canDrag = editorSubMode === "Layout Designer";
+
+                    return (
+                      <div
+                        key={article.id}
+                        draggable={canDrag}
+                        onDragStart={(e) => handleDragStart(e, article.id)}
+                        className={`group p-3 border rounded-xl transition text-left ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-default"} ${isSlotted ? "bg-zinc-900/40 border-amber-400/30 border-dashed" : "bg-zinc-900 border-zinc-800 hover:border-zinc-700"}`}
+                      >
+                        <div className="flex justify-between items-center text-[8px] font-mono uppercase mb-1">
+                          <span className="text-zinc-500">{article.category}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-amber-400 font-bold">{isHero ? "★ Hero" : isSec ? "★ Secondary" : isSub ? "★ Sub-Feature" : "Available"}</span>
+                            
+                            {/* CABINET REMOVAL ASSIGNMENT TRIGGER */}
+                            <button 
+                              type="button" 
+                              onClick={(e) => { e.stopPropagation(); handleDeleteArticle(article.id); }} 
+                              className="text-zinc-600 hover:text-red-400 p-0.5 transition"
+                              title="Delete from archive"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                        <h4 className="font-serif text-xs font-bold text-zinc-100 line-clamp-2 leading-tight group-hover:underline">{article.headline}</h4>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </aside>
+          ) : null}
+
         </div>
       </div>
 
-      {/* FOOTER WRAPPER */}
+      {/* FOOTER WRAPPER BLOCK PANEL */}
       <footer className="mt-16 bg-zinc-950 text-zinc-200 py-12 border-t border-zinc-900" id="press-footer">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 text-left">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-8 border-b border-zinc-900 pb-8">
@@ -1097,20 +1187,21 @@ export default function App() {
         </div>
       </footer>
 
-      {/* ARTICLE CONTENT DETAILED READER VIEW MODAL */}
+      {/* DETAILED ARTICLE MODAL VIEWER SYSTEM */}
       <ArticleModal 
         article={selectedArticle}
         onClose={() => setSelectedArticle(null)}
         isBookmarked={selectedArticle ? bookmarkedIds.includes(selectedArticle.id) : false}
         onToggleBookmark={(id) => setBookmarkedIds(bookmarkedIds.includes(id) ? bookmarkedIds.filter(b => b !== id) : [...bookmarkedIds, id])}
         isEditorMode={isEditorMode}
-        editorSubMode="Text Editor"
+        editorSubMode={editorSubMode}
         onUpdateArticleText={handleInlineTextSave}
         onUpdateArticleParagraph={(artId, pIdx, val) => {
           setArticles(prev => prev.map(a => {
-            if (String(a.id) === String(artId)) {
+            if (a.id === artId) {
               const paras = [...a.paragraphs];
               paras[pIdx] = val;
+              // Sync change back locally
               return { ...a, paragraphs: paras };
             }
             return a;
@@ -1119,7 +1210,7 @@ export default function App() {
         }}
       />
 
-      {/* COMPOSER MODAL EXPONENT FORM */}
+      {/* COMPOSER INSERTION MODAL EXPONENT CARD */}
       {showPublishModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
           <div className="relative flex max-h-[90vh] w-full max-w-2xl flex-col rounded-2xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl overflow-hidden animate-in zoom-in-95 text-left space-y-4">
@@ -1129,91 +1220,26 @@ export default function App() {
             </div>
             
             <form onSubmit={handleGeneralSubmitStory} className="space-y-4 overflow-y-auto pr-1 text-xs text-left">
-              <input type="text" required placeholder="Story Headline Title..." value={editorFormHeadline} onChange={(e) => setEditorFormHeadline(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2.5 text-zinc-100 rounded" />
-              <input type="text" required placeholder="Author Byline..." value={editorFormByline} onChange={(e) => setEditorFormByline(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2.5 text-zinc-100 rounded" />
-              <input type="text" placeholder="Subheading Teaser Context Summary..." value={editorFormSubheading} onChange={(e) => setEditorFormSubheading(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2.5 text-zinc-100 rounded" />
+              <input type="text" required placeholder="Story Headline Title..." value={editorFormHeadline} onChange={(e) => setEditorFormHeadline(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2.5 text-zinc-100" />
+              <input type="text" required placeholder="Author Byline..." value={editorFormByline} onChange={(e) => setEditorFormByline(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2.5 text-zinc-100" />
+              <input type="text" placeholder="Subheading Teaser Context Summary..." value={editorFormSubheading} onChange={(e) => setEditorFormSubheading(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2.5 text-zinc-100" />
               
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-zinc-400 mb-1 font-bold">Section Category</label>
-                  <select value={editorFormCategory} onChange={(e) => setEditorFormCategory(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2.5 text-zinc-100 rounded">
-                    {availableCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-mono uppercase text-zinc-400 mb-1 font-bold">Cover Asset Image</label>
-                  <label className="flex flex-col items-center justify-center w-full h-10 border border-dashed border-zinc-800 bg-zinc-900 hover:bg-zinc-850 rounded cursor-pointer text-center">
-                    <span className="font-mono text-[10px] text-zinc-400 uppercase tracking-wide line-clamp-1 px-2">
-                      {editorFormImageUrl ? "✓ Local Image Attached" : "Upload Image"}
-                    </span>
-                    <input type="file" accept="image/*" className="hidden" onChange={handleImageUploadChange} />
-                  </label>
-                </div>
+              {/* UPLOADER CONTAINER COMPONENT IN MODAL */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-mono uppercase text-zinc-450 font-black">Cover Image Graphics</label>
+                <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-zinc-800 bg-zinc-900 hover:bg-zinc-850 rounded-xl cursor-pointer text-center">
+                  <Upload className="h-5 w-5 text-zinc-500 mb-1" />
+                  <span className="font-mono text-[10px] text-zinc-400 uppercase tracking-wide">
+                    {editorFormImageUrl ? "✓ Local graphic media attached" : "Upload image file from computer"}
+                  </span>
+                  <input type="file" accept="image/*" className="hidden" onChange={handleImageUploadChange} />
+                </label>
               </div>
 
-              {/* TAG MODULE INSIDE THE POPUP MODAL COMPOSER */}
-              <div className="bg-zinc-900 p-3 border border-zinc-800 rounded space-y-2">
-                <label className="block text-[10px] uppercase font-mono text-amber-400 font-bold">Manage Story Index Tags</label>
-                
-                <div className="flex flex-wrap gap-1">
-                  {editorFormTags.map(t => (
-                    <span key={t} className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-mono ${t === 'Front Page' ? 'bg-amber-400 text-zinc-950 font-bold' : 'bg-zinc-800 text-zinc-200'}`}>
-                      {t}
-                      <button type="button" onClick={() => setEditorFormTags(prev => prev.filter(tag => tag !== t))} className="hover:text-red-400 font-black text-[9px] ml-1">×</button>
-                    </span>
-                  ))}
-                </div>
-
-                <div className="flex gap-2">
-                  <input 
-                    type="text" 
-                    placeholder="Add custom tag string..." 
-                    value={composerTagInput} 
-                    onChange={(e) => setComposerTagInput(e.target.value)} 
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        if (composerTagInput.trim() && !editorFormTags.includes(composerTagInput.trim())) {
-                          setEditorFormTags([...editorFormTags, composerTagInput.trim()]);
-                          setComposerTagInput("");
-                        }
-                      }
-                    }}
-                    className="flex-1 bg-zinc-950 border border-zinc-800 p-1.5 px-2.5 text-zinc-200 rounded text-[11px]" 
-                  />
-                  <button 
-                    type="button" 
-                    onClick={() => {
-                      if (composerTagInput.trim() && !editorFormTags.includes(composerTagInput.trim())) {
-                        setEditorFormTags([...editorFormTags, composerTagInput.trim()]);
-                        setComposerTagInput("");
-                      }
-                    }} 
-                    className="bg-zinc-800 border border-zinc-700 px-4 rounded font-mono font-bold text-[10px] text-zinc-200"
-                  >
-                    Add
-                  </button>
-                </div>
-
-                <div className="pt-0.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const updated = validateAndToggleFrontPageTag(editorFormTags);
-                      setEditorFormTags(updated);
-                    }}
-                    className={`text-[10px] font-mono px-2.5 py-1.5 rounded border transition ${editorFormTags.includes("Front Page") ? "bg-amber-400 text-zinc-950 border-amber-500 font-bold" : "bg-zinc-950 text-zinc-400 border-zinc-800 hover:text-zinc-200"}`}
-                  >
-                    {editorFormTags.includes("Front Page") ? "★ Front Page Selected" : "☆ Feature on Front Page Slots"}
-                  </button>
-                </div>
-              </div>
-
-              <textarea required rows={5} placeholder="Type or paste article paragraph narratives here..." value={editorFormBodyText} onChange={(e) => setEditorFormBodyText(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2.5 font-serif text-zinc-100 leading-relaxed rounded" />
+              <textarea required rows={6} placeholder="Type or paste article paragraph strings here..." value={editorFormBodyText} onChange={(e) => setEditorFormBodyText(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-2.5 font-serif text-zinc-100 leading-relaxed" />
               <div className="flex justify-end gap-2 pt-2 border-t border-zinc-800">
                 <button type="button" onClick={() => setShowPublishModal(false)} className="px-4 py-2 font-mono text-zinc-500 font-bold uppercase">Cancel</button>
-                <button type="submit" className="bg-amber-400 hover:bg-amber-500 text-zinc-950 px-6 py-2 uppercase font-mono font-black tracking-wider rounded">
+                <button type="submit" className="bg-amber-400 hover:bg-amber-500 text-zinc-950 px-6 py-2 uppercase font-mono font-black tracking-wider">
                   {isEditorMode ? "Publish Live &rarr;" : "Transmit Draft Entry"}
                 </button>
               </div>
@@ -1222,7 +1248,7 @@ export default function App() {
         </div>
       )}
 
-      {/* EDITORIAL AI LAB PANEL */}
+      {/* EDITORIAL AI COPROCESSOR DESK LAB */}
       {showAiLab && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
           <div className="relative flex max-h-[90vh] w-full max-w-4xl flex-col rounded-2xl border border-zinc-850 bg-zinc-900 p-6 shadow-2xl overflow-hidden animate-in zoom-in-95 space-y-4">
@@ -1268,12 +1294,12 @@ export default function App() {
         </div>
       )}
 
-      {/* ACCESS CODE SECURITY LOCK GATEWAY */}
+      {/* EXECUTIVE AUTHORIZATION SYSTEM LOCK MODAL */}
       {showPasswordModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md bg-zinc-950 border border-zinc-800 p-6 rounded-2xl shadow-2xl text-left space-y-4 animate-in zoom-in-95 duration-150">
-            <span className="font-serif text-md font-black text-zinc-100 uppercase border-b border-zinc-900 pb-2 flex items-center gap-2"><Lock className="h-5 w-5 text-amber-500" /> Security Credentials Key</span>
-            <p className="text-xs text-zinc-400 leading-relaxed">Input administrative access credentials to engage creation and classification tools.</p>
+            <span className="font-serif text-md font-black text-zinc-100 uppercase border-b border-zinc-900 pb-2 flex items-center gap-2"><Lock className="h-5 w-5 text-amber-500 animate-pulse" /> Security Authorization Clearance</span>
+            <p className="text-xs text-zinc-400 leading-relaxed">Input administrative access credentials to decouple viewer parameters and engage inline editing tools.</p>
             <form onSubmit={(e) => {
               e.preventDefault();
               if (passwordInput === "reaquit") {
@@ -1281,15 +1307,15 @@ export default function App() {
                 setUserRole("Editor");
                 setShowPasswordModal(false);
                 setPasswordInput("");
-                showToast("Editorial Privilege Decoupled! 🗝️");
+                showToast("Editorial Privileges Granted! 🗝️");
               } else {
-                showToast("Invalid Credentials.");
+                showToast("Invalid Editorial Credentials.");
               }
             }} className="space-y-4">
               <input type="password" required placeholder="Access code sequence..." value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} className="w-full bg-zinc-900 border border-zinc-800 p-3 text-zinc-100 font-mono tracking-widest text-xs" />
               <div className="flex justify-end gap-2 text-xs font-mono">
                 <button type="button" onClick={() => { setShowPasswordModal(false); setPasswordInput(""); }} className="px-4 text-zinc-500 uppercase font-bold">Abort</button>
-                <button type="submit" className="bg-amber-400 text-zinc-950 font-black py-2 px-4 uppercase flex items-center gap-1"><Unlock className="h-3.5 w-3.5" /> Confirm</button>
+                <button type="submit" className="bg-amber-400 text-zinc-950 font-black py-2 px-4 uppercase flex items-center gap-1"><Unlock className="h-3.5 w-3.5" /> Confirm Key</button>
               </div>
             </form>
           </div>
