@@ -920,7 +920,7 @@ export default function App() {
                       {/* POSITION 2: SECONDARY SLOT GRID TARGET */}
                       <div 
                         onDragOver={(e) => { e.preventDefault(); if (isEditorMode) setIsSecondaryDraggingOver(true); }}
-                        onDragLeave={() => if (isEditorMode) setIsSecondaryDraggingOver(false)}
+                       onDragLeave={() => { if (isEditorMode) setIsSecondaryDraggingOver(false); }}
                         onDrop={(e) => { if (isEditorMode) { handleSlotDrop(e, "secondary"); setIsSecondaryDraggingOver(false); } }}
                         className={`rounded-2xl p-5 transition flex-1 flex flex-col justify-between border ${isEditorMode && editorSubMode === "Layout Designer" ? isSecondaryDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60" : "bg-zinc-900 border-zinc-800"}`}
                       >
@@ -957,7 +957,7 @@ export default function App() {
                       {/* POSITION 3: SUB-FEATURE TRACK COMPONENT */}
                       <div 
                         onDragOver={(e) => { e.preventDefault(); if (isEditorMode) setIsSubFeatureDraggingOver(true); }}
-                        onDragLeave={() => if (isEditorMode) setIsSubFeatureDraggingOver(false)}
+                        onDragLeave={() => { if (isEditorMode) setIsSubFeatureDraggingOver(false); }}
                         onDrop={(e) => { if (isEditorMode) { handleSlotDrop(e, "subFeature"); setIsSubFeatureDraggingOver(false); } }}
                         className={`rounded-2xl p-5 transition flex-1 flex flex-col justify-between border ${isEditorMode && editorSubMode === "Layout Designer" ? isSubFeatureDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60" : "bg-zinc-900 border-zinc-800"}`}
                       >
