@@ -90,9 +90,9 @@ export default function App() {
         if (slotsData) {
           const mapping = { heroId: null, secondaryId: null, subFeatureId: null };
           slotsData.forEach(slot => {
-            if (slot.slot_name === "hero") mapping.heroId = slot.article_id;
-            if (slot.slot_name === "secondary") mapping.secondaryId = slot.article_id;
-            if (slot.slot_name === "sub_feature") mapping.subFeatureId = slot.article_id;
+            if (slot.slot_name === "hero") mapping.heroId = slot.article_id || slot.id;
+            if (slot.slot_name === "secondary") mapping.secondaryId = slot.article_id || slot.id;
+            if (slot.slot_name === "sub_feature") mapping.subFeatureId = slot.article_id || slot.id;
           });
           setPageSlots(mapping);
         }
