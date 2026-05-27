@@ -883,7 +883,7 @@ export default function App() {
                             {/* UNLOCKED INLINE SUBHEADING BLOCK */}
                             <p 
                               contentEditable={isEditorMode && editorSubMode === "Text Editor"}
-                              suppressContentEditableWarning={true; }
+                              suppressContentEditableWarning={true}
                               onBlur={(e) => handleInlineTextSave(slottedHero.id, "subheading", e.currentTarget.innerText)}
                               onClick={(e) => { if (isEditorMode && editorSubMode === "Text Editor") e.stopPropagation(); }}
                               className={`text-xs text-zinc-400 font-sans leading-relaxed focus:outline-none rounded ${isEditorMode && editorSubMode === "Text Editor" ? "border border-dashed border-amber-400/60 bg-zinc-950/40 p-1 cursor-text" : ""}`}
