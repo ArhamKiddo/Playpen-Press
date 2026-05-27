@@ -860,7 +860,7 @@ export default function App() {
                     {/* POSITION 1: MARQUEE HERO BOX */}
                     <div 
                       onDragOver={(e) => { e.preventDefault(); if (isEditorMode) setIsHeroDraggingOver(true); }}
-                      onDragLeave={() => if (isEditorMode) setIsHeroDraggingOver(false)}
+                      onDragLeave={() => { if (isEditorMode) setIsHeroDraggingOver(false); }}
                       onDrop={(e) => { if (isEditorMode) { handleSlotDrop(e, "hero"); setIsHeroDraggingOver(false); } }}
                       className={`md:col-span-7 rounded-2xl p-1 transition overflow-hidden border ${isEditorMode && editorSubMode === "Layout Designer" ? isHeroDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60" : "bg-zinc-900 border-zinc-800"}`}
                     >
