@@ -579,21 +579,25 @@ const getSortedAndFilteredArchive = () => {
 const safeArticles = articles || [];
   const fallbackObj = { headline: "", title: "", byline: "", category: "", paragraphs: [], tags: [], date: "", imageUrl: "", image_data: "" };
 
-  const rawHero = safeArticles.find(a => a?.id === pageSlots?.heroId);
+  const safeArticles = articles || [];
+  const fallbackObj = { headline: "", title: "", byline: "", category: "", paragraphs: [], tags: [], date: "", imageUrl: "", image_data: "" };
+
+  // Use String() conversion to guarantee type matching across database states!
+  const rawHero = safeArticles.find(a => a ? String(a.id) === String(pageSlots?.heroId) : false);
   const slottedHero = rawHero ? {
     ...rawHero,
     headline: rawHero.headline || rawHero.title || "",
     imageUrl: rawHero.imageUrl || rawHero.image_data || ""
   } : fallbackObj;
 
-  const rawSecondary = safeArticles.find(a => a?.id === pageSlots?.secondaryId);
+  const rawSecondary = safeArticles.find(a => a ? String(a.id) === String(pageSlots?.secondaryId) : false);
   const slottedSecondary = rawSecondary ? {
     ...rawSecondary,
     headline: rawSecondary.headline || rawSecondary.title || "",
     imageUrl: rawSecondary.imageUrl || rawSecondary.image_data || ""
   } : fallbackObj;
 
-  const rawSubFeature = safeArticles.find(a => a?.id === pageSlots?.subFeatureId);
+  const rawSubFeature = safeArticles.find(a => a ? String(a.id) === String(pageSlots?.subFeatureId) : false);
   const slottedSubFeature = rawSubFeature ? {
     ...rawSubFeature,
     headline: rawSubFeature.headline || rawSubFeature.title || "",
