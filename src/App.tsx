@@ -586,17 +586,29 @@ const fallbackObj = {
   date: "" 
 };
 
-const slottedHero = pageSlots?.heroId 
-  ? (safeArticles.find(a => a?.id === pageSlots.heroId) || fallbackObj) 
-  : fallbackObj;
+const safeArticles = articles || [];
+  const fallbackObj = { headline: "", title: "", byline: "", category: "", paragraphs: [], tags: [], date: "", imageUrl: "", image_data: "" };
 
-const slottedSecondary = pageSlots?.secondaryId 
-  ? (safeArticles.find(a => a?.id === pageSlots.secondaryId) || fallbackObj) 
-  : fallbackObj;
+  const rawHero = safeArticles.find(a => a?.id === pageSlots?.heroId);
+  const slottedHero = rawHero ? {
+    ...rawHero,
+    headline: rawHero.headline || rawHero.title || "",
+    imageUrl: rawHero.imageUrl || rawHero.image_data || ""
+  } : fallbackObj;
 
-const slottedSubFeature = pageSlots?.subFeatureId 
-  ? (safeArticles.find(a => a?.id === pageSlots.subFeatureId) || fallbackObj) 
-  : fallbackObj;
+  const rawSecondary = safeArticles.find(a => a?.id === pageSlots?.secondaryId);
+  const slottedSecondary = rawSecondary ? {
+    ...rawSecondary,
+    headline: rawSecondary.headline || rawSecondary.title || "",
+    imageUrl: rawSecondary.imageUrl || rawSecondary.image_data || ""
+  } : fallbackObj;
+
+  const rawSubFeature = safeArticles.find(a => a?.id === pageSlots?.subFeatureId);
+  const slottedSubFeature = rawSubFeature ? {
+    ...rawSubFeature,
+    headline: rawSubFeature.headline || rawSubFeature.title || "",
+    imageUrl: rawSubFeature.imageUrl || rawSubFeature.image_data || ""
+  } : fallbackObj;
 
   const currentSlottedIds = [pageSlots.heroId, pageSlots.secondaryId, pageSlots.subFeatureId].filter(Boolean);
   
