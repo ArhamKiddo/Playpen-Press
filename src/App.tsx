@@ -281,7 +281,11 @@ export default function App() {
     }
 
     if (articleId) {
-      const databaseSlotName = slotKey === "subFeature" ? "sub_feature" : slotKey;
+      // Strips "Id" out and converts camelCase cleanly to snake_case for Supabase
+      let databaseSlotName = slotKey.replace('Id', '');
+      if (databaseSlotName === "subFeature") {
+        databaseSlotName = "sub_feature";
+      }
       
       // Local State Commit
       setPageSlots(prev => ({
