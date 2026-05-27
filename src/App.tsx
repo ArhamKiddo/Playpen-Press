@@ -575,16 +575,6 @@ const getSortedAndFilteredArchive = () => {
   });
 };
   // Object State Assignment Handlers
- const safeArticles = articles || [];
-
-const fallbackObj = { 
-  headline: "", 
-  byline: "", 
-  category: "", 
-  paragraphs: [], 
-  tags: [], 
-  date: "" 
-};
 
 const safeArticles = articles || [];
   const fallbackObj = { headline: "", title: "", byline: "", category: "", paragraphs: [], tags: [], date: "", imageUrl: "", image_data: "" };
