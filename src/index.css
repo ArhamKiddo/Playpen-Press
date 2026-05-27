@@ -1,0 +1,170 @@
+@import url('https://fonts.googleapis.com/css2?family=Pirata+One&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Playfair Display", Georgia, serif;
+  --font-sans: "Futura", "Century Gothic", "Plus Jakarta Sans", "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-title: "Pirata One", Georgia, serif;
+}
+
+.font-title {
+  font-family: var(--font-title);
+}
+
+/* Color theme palette specifications */
+.theme-purple-cream {
+  --theme-bg-primary: #fcfaf5;       /* Dynamic soft cream/ivory foundation background */
+  --theme-bg-secondary: #f4eee1;     /* Richer cream/biscuit surfaces */
+  --theme-bg-tertiary: #ebe3d3;      /* Deep cream border accent backgrounds */
+  --theme-text-primary: #1f0c33;     /* Luxurious deep royal purple text */
+  --theme-text-secondary: #5a4c6a;   /* Calming slate purple middle-ground text */
+  --theme-text-tertiary: #7d6e8f;    /* Elegant muted lavender grey */
+  --theme-border: #dfd8cb;           /* Polished sand separator lines */
+  --theme-border-double: #cfc2aa;    /* Classical dual header framing borders */
+  --theme-accent: #7c3aed;           /* Dynamic violet/purple brand identity */
+  --theme-accent-hover: #6d28d9;     /* Deep velvet violet hover */
+  --theme-accent-light: rgba(124, 58, 237, 0.12); /* Soft violet highlights */
+  --theme-accent-text: #ffffff;      /* Contrast light typography overlay */
+}
+
+.theme-purple-grey {
+  --theme-bg-primary: #131118;       /* Sophisticated deep dark grey background */
+  --theme-bg-secondary: #1d1a24;     /* Dark charcoal surface structures */
+  --theme-bg-tertiary: #272432;      /* Medium charcoal-purple block highlights */
+  --theme-text-primary: #f5f3f9;     /* Soft high-contrast light lavender text */
+  --theme-text-secondary: #a39bb0;   /* Slate lavender-grey body text */
+  --theme-text-tertiary: #7d7589;    /* Warm muted charcoal-purple metadata */
+  --theme-border: #2c2538;           /* Intricate violet-grey structural frames */
+  --theme-border-double: #3a3249;    /* Dual dark framing lines */
+  --theme-accent: #b392f0;           /* Vivid electric purple/lavender accent */
+  --theme-accent-hover: #c084fc;     /* Hypnotic vibrant orchid hover */
+  --theme-accent-light: rgba(179, 146, 240, 0.18); /* Ambient glowing highlights */
+  --theme-accent-text: #131118;      /* Deep contrast dark overlay color */
+}
+
+/* Master dynamic styling bridge for theme selection states */
+.theme-parent {
+  background-color: var(--theme-bg-primary) !important;
+  color: var(--theme-text-primary) !important;
+}
+
+.theme-parent .bg-zinc-950 {
+  background-color: var(--theme-bg-primary) !important;
+}
+.theme-parent .bg-zinc-900 {
+  background-color: var(--theme-bg-secondary) !important;
+}
+.theme-parent .bg-zinc-905,
+.theme-parent .bg-zinc-900\/90 {
+  background-color: var(--theme-bg-tertiary) !important;
+}
+.theme-parent .bg-zinc-900\/40 {
+  background-color: var(--theme-bg-secondary) !important;
+  opacity: 0.95;
+}
+.theme-parent .bg-zinc-900\/30 {
+  background-color: var(--theme-bg-secondary) !important;
+  opacity: 0.85;
+}
+.theme-parent .bg-zinc-950\/80 {
+  background-color: var(--theme-bg-primary) !important;
+  opacity: 0.95;
+}
+.theme-parent .bg-black\/80 {
+  background-color: rgba(15, 12, 20, 0.85) !important;
+}
+
+/* Semantic Typography Theme-Shifters */
+.theme-parent .text-zinc-100,
+.theme-parent .text-zinc-150,
+.theme-parent .text-zinc-200,
+.theme-parent .text-zinc-50 {
+  color: var(--theme-text-primary) !important;
+}
+.theme-parent .text-zinc-300,
+.theme-parent .text-zinc-350,
+.theme-parent .text-zinc-250,
+.theme-parent .text-zinc-400 {
+  color: var(--theme-text-secondary) !important;
+}
+.theme-parent .text-zinc-500,
+.theme-parent .text-zinc-550,
+.theme-parent .text-zinc-600,
+.theme-parent .text-zinc-650 {
+  color: var(--theme-text-tertiary) !important;
+}
+
+/* Architectural Framing Systems */
+.theme-parent .border-zinc-800,
+.theme-parent .border-zinc-850,
+.theme-parent .border-zinc-855,
+.theme-parent .border-zinc-810,
+.theme-parent .border-zinc-805,
+.theme-parent .border-zinc-700 {
+  border-color: var(--theme-border) !important;
+}
+.theme-parent .border-double {
+  border-color: var(--theme-border-double) !important;
+}
+
+/* Brand Identifier Accents & Interactions (Original Amber/Secondary map) */
+.theme-parent .text-amber-400,
+.theme-parent .text-amber-450 {
+  color: var(--theme-accent) !important;
+}
+.theme-parent .bg-amber-400,
+.theme-parent .bg-amber-500 {
+  background-color: var(--theme-accent) !important;
+  color: var(--theme-accent-text) !important;
+}
+.theme-parent .bg-amber-400:hover,
+.theme-parent .bg-amber-500:hover {
+  background-color: var(--theme-accent-hover) !important;
+  color: var(--theme-accent-text) !important;
+}
+.theme-parent .bg-amber-500\/20 {
+  background-color: var(--theme-accent-light) !important;
+  color: var(--theme-accent) !important;
+}
+.theme-parent .border-amber-400,
+.theme-parent .border-amber-500,
+.theme-parent .border-amber-550\/35,
+.theme-parent .border-amber-500\/30 {
+  border-color: var(--theme-accent) !important;
+}
+.theme-parent .hover\:border-zinc-700:hover {
+  border-color: var(--theme-accent) !important;
+}
+
+/* Specialty components map */
+.theme-parent .bg-indigo-950\/80 {
+  background-color: var(--theme-accent-light) !important;
+  border-color: var(--theme-accent) !important;
+}
+.theme-parent .text-indigo-400 {
+  color: var(--theme-accent) !important;
+}
+.theme-parent .bg-emerald-500 {
+  background-color: var(--theme-accent) !important;
+  color: var(--theme-accent-text) !important;
+}
+.theme-parent .bg-emerald-500:hover {
+  background-color: var(--theme-accent-hover) !important;
+}
+.theme-parent .border-emerald-400 {
+  border-color: var(--theme-accent) !important;
+}
+
+/* Custom newspaper styling */
+.drop-cap::first-letter {
+  font-family: var(--font-serif);
+  float: left;
+  font-size: 3.5rem;
+  line-height: 2.8rem;
+  padding-top: 4px;
+  padding-right: 8px;
+  padding-left: 3px;
+  font-weight: bold;
+}
+

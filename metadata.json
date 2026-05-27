@@ -1,0 +1,6 @@
+{
+  "name": "School Press",
+  "description": "A professional publishing and editorial platform for student journalism, school newsletters, and AI-assisted newspaper drafting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
