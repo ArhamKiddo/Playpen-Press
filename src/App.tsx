@@ -63,26 +63,26 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
 
   // Core Real-time Fetch Synchronization
- useEffect(() => {
+useEffect(() => {
+    // THIS 'async' IS REQUIRED FOR AWAIT TO WORK
     const fetchNewspaperData = async () => {
       setLoading(true);
       try {
-        const { data: articlesData } = await supabase.from("articles").select("*");
-        if (articlesData) setArticles(articlesData);
+        // Now you can safely 'await' here
+        const { data: slotsData, error: slotError } = await supabase
+          .from("layout_slots")
+          .select("*");
+          
+        // ... rest of your logic
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-        const { data: slotsData } = await supabase.from("layout_slots").select("*");
-        
-        // Force the app to define the slots even if the database response is messy
-        const mapping = { heroId: null, secondaryId: null, subFeatureId: null };
-        
-        if (slotsData) {
-          slotsData.forEach(slot => {
-            const id = slot.article_id || slot.id;
-            if (slot.slot_name === "hero") mapping.heroId = id;
-            if (slot.slot_name === "secondary") mapping.secondaryId = id;
-            if (slot.slot_name === "sub_feature") mapping.subFeatureId = id;
-          });
-        }
+    fetchNewspaperData();
+  }, []); // <--- Make sure this closing bracket is here
         setPageSlots(mapping); // This ALWAYS sets the state, even if all values are null
       } catch (err) {
         console.error("Fetch Error:", err);
