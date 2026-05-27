@@ -267,7 +267,7 @@ export default function App() {
   };
 
   // Cloud Dropzone Slot State Execution Mutations
-  const handleSlotDrop = async (e: React.DragEvent, slotKey: "hero" | "secondary" | "subFeature") => {
+  const handleSlotDrop = async (e: React.DragEvent, slotKey: "heroId" | "secondaryId" | "subFeatureId") => {
     e.preventDefault();
     const rawData = e.dataTransfer.getData("text/plain");
     if (!rawData) return;
@@ -276,10 +276,9 @@ export default function App() {
     try {
       const parsed = JSON.parse(rawData);
       articleId = parsed.id;
-    } catch (jsonErr) {
+    } catch {
       articleId = rawData;
     }
-
     if (articleId) {
       // Strips "Id" out and converts camelCase cleanly to snake_case for Supabase
       let databaseSlotName = slotKey.replace('Id', '');
