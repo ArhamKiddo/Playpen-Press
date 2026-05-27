@@ -63,23 +63,35 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
 
   // Core Real-time Fetch Synchronization
-  useEffect(() => {
+ useEffect(() => {
     const fetchNewspaperData = async () => {
       setLoading(true);
       try {
-        // 1. Fetch all published articles from Supabase cloud ledger
-        const { data: articlesData, error: artError } = await supabase
-          .from("articles")
-          .select("*")
-          .order("created_at", { ascending: false });
+        const { data: articlesData } = await supabase.from("articles").select("*");
+        if (articlesData) setArticles(articlesData);
+
+        const { data: slotsData } = await supabase.from("layout_slots").select("*");
         
-        if (artError) throw artError;
-        if (articlesData) {
-          setArticles(articlesData.map(art => ({
-            ...art,
-            tags: art.tags || [art.category, "Featured"]
-          })));
+        // Force the app to define the slots even if the database response is messy
+        const mapping = { heroId: null, secondaryId: null, subFeatureId: null };
+        
+        if (slotsData) {
+          slotsData.forEach(slot => {
+            const id = slot.article_id || slot.id;
+            if (slot.slot_name === "hero") mapping.heroId = id;
+            if (slot.slot_name === "secondary") mapping.secondaryId = id;
+            if (slot.slot_name === "sub_feature") mapping.subFeatureId = id;
+          });
         }
+        setPageSlots(mapping); // This ALWAYS sets the state, even if all values are null
+      } catch (err) {
+        console.error("Fetch Error:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchNewspaperData();
+  }, []);
 
 // 2. Fetch the active visual front page layout mapping slots
         const { data: slotsData, error: slotError } = await supabase
