@@ -575,18 +575,51 @@ const getSortedAndFilteredArchive = () => {
   });
 };
   // Object State Assignment Handlers
-  const slottedHero = pageSlots.heroId ? (articles.find(a => a.id === pageSlots.heroId) || null) : null;
-  const slottedSecondary = pageSlots.secondaryId ? (articles.find(a => a.id === pageSlots.secondaryId) || null) : null;
-  const slottedSubFeature = pageSlots.subFeatureId ? (articles.find(a => a.id === pageSlots.subFeatureId) || null) : null;
+ const safeArticles = articles || [];
+
+const fallbackObj = { 
+  headline: "", 
+  byline: "", 
+  category: "", 
+  paragraphs: [], 
+  tags: [], 
+  date: "" 
+};
+
+const slottedHero = pageSlots?.heroId 
+  ? (safeArticles.find(a => a?.id === pageSlots.heroId) || fallbackObj) 
+  : fallbackObj;
+
+const slottedSecondary = pageSlots?.secondaryId 
+  ? (safeArticles.find(a => a?.id === pageSlots.secondaryId) || fallbackObj) 
+  : fallbackObj;
+
+const slottedSubFeature = pageSlots?.subFeatureId 
+  ? (safeArticles.find(a => a?.id === pageSlots.subFeatureId) || fallbackObj) 
+  : fallbackObj;
 
   const currentSlottedIds = [pageSlots.heroId, pageSlots.secondaryId, pageSlots.subFeatureId].filter(Boolean);
   
-  const displayedFeedArticles = articles.filter(art => {
-    const isSlotted = currentSlottedIds.includes(art.id);
-    const matchesCategory = selectedCategory === "All" || art.category === selectedCategory || (art.tags && art.tags.includes(selectedCategory));
-    const matchesSearch = art.headline.toLowerCase().includes(searchQuery.toLowerCase()) || art.byline.toLowerCase().includes(searchQuery.toLowerCase());
-    return !isSlotted && matchesCategory && matchesSearch;
-  });
+const displayedFeedArticles = (articles || []).filter(art => {
+  if (!art) return false;
+
+  const isSlotted = currentSlottedIds ? currentSlottedIds.includes(art.id) : false;
+  
+  const categoryStr = art.category || "";
+  const artTags = art.tags || [];
+  const matchesCategory = selectedCategory === "All" || 
+                          categoryStr === selectedCategory || 
+                          artTags.includes(selectedCategory);
+
+  const headlineStr = art.headline || "";
+  const bylineStr = art.byline || "";
+  const searchStr = searchQuery ? searchQuery.toLowerCase() : "";
+
+  const matchesSearch = headlineStr.toLowerCase().includes(searchStr) || 
+                        bylineStr.toLowerCase().includes(searchStr);
+
+  return !isSlotted && matchesCategory && matchesSearch;
+});
 
   const availableTags = ["Campus", "Sports", "Opinion", "Science", "Tech", "Arts"];
 
