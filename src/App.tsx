@@ -288,11 +288,35 @@ export default function App() {
         [`${slotKey}Id`]: articleId
       }));
 
+     // Cloud Dropzone Slot State Execution Mutations
+  const handleSlotDrop = async (e: React.DragEvent, slotKey: "hero" | "secondary" | "subFeature") => {
+    e.preventDefault();
+    const rawData = e.dataTransfer.getData("text/plain");
+    if (!rawData) return;
+
+    let articleId = "";
+    try {
+      const parsed = JSON.parse(rawData);
+      articleId = parsed.id;
+    } catch (jsonErr) {
+      articleId = rawData;
+    }
+
+    if (articleId) {
+      // Aligns the incoming slot key with the database row format strings
+      const databaseSlotName = slotKey === "subFeature" ? "sub_feature" : slotKey;
+      
+      // Local State Commit
+      setPageSlots(prev => ({
+        ...prev,
+        [`${slotKey}Id`]: articleId
+      }));
+
       // Cloud Persistence Commit
       const { error } = await supabase
         .from("layout_slots")
         .update({ article_id: articleId })
-        .eq("slot_name", databaseSlotName); // Correct slot_name parameter alignment
+        .eq("slot_name", databaseSlotName);
 
       if (error) {
         console.error("Dropzone mapping allocation rejected:", error.message);
