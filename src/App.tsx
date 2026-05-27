@@ -63,34 +63,39 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
 
   // Core Real-time Fetch Synchronization
-// Core Real-time Fetch Synchronization
   useEffect(() => {
     const fetchNewspaperData = async () => {
       setLoading(true);
       try {
-        // 1. Fetch all published articles
-        const { data: articlesData } = await supabase.from("articles").select("*");
-        if (articlesData) setArticles(articlesData);
+        // 1. Fetch all published articles from Supabase cloud ledger
+        const { data: articlesData, error: artError } = await supabase
+          .from("articles")
+          .select("*")
+          .order("created_at", { ascending: false });
+        
+        if (artError) throw artError;
+        if (articlesData) {
+          setArticles(articlesData.map(art => ({
+            ...art,
+            tags: art.tags || [art.category, "Featured"]
+          })));
+        }
 
         // 2. Fetch the active visual front page layout mapping slots
         const { data: slotsData, error: slotError } = await supabase
           .from("layout_slots")
           .select("*");
-
-        if (slotError) throw slotError;
-
-        // 3. Map the slots accurately
-        const mapping = { heroId: null, secondaryId: null, subFeatureId: null };
-        if (slotsData) {
-          slotsData.forEach((slot: any) => {
-            const id = slot.article_id || slot.id;
-            if (slot.slot_name === "hero") mapping.heroId = id;
-            if (slot.slot_name === "secondary") mapping.secondaryId = id;
-            if (slot.slot_name === "sub_feature") mapping.subFeatureId = id;
-          });
-        }
-        setPageSlots(mapping);
         
+        if (slotError) throw slotError;
+        if (slotsData) {
+          const mapping = { heroId: null, secondaryId: null, subFeatureId: null };
+          slotsData.forEach(slot => {
+            if (slot.slot_name === "hero") mapping.heroId = slot.article_id;
+            if (slot.slot_name === "secondary") mapping.secondaryId = slot.article_id;
+            if (slot.slot_name === "sub_feature") mapping.subFeatureId = slot.article_id;
+          });
+          setPageSlots(mapping);
+        }
       } catch (err: any) {
         console.error("Supabase Initialization Error:", err.message);
         showToast("Error connecting to database infrastructure.");
@@ -252,16 +257,16 @@ export default function App() {
 
   // Drag operations configuration
   const handleDragStart = (e: React.DragEvent, articleId: string) => {
-    const article = articles.find(a => a.id === articleId);
+    const article = articles.find(a => String(a.id) === String(articleId));
     if (article) {
       e.dataTransfer.setData("text/plain", JSON.stringify(article));
     } else {
-      e.dataTransfer.setData("text/plain", articleId);
+      e.dataTransfer.setData("text/plain", String(articleId));
     }
     e.dataTransfer.effectAllowed = "move";
   };
 
-// Cloud Dropzone Slot State Execution Mutations
+  // Cloud Dropzone Slot State Execution Mutations
   const handleSlotDrop = async (e: React.DragEvent, slotKey: "hero" | "secondary" | "subFeature") => {
     e.preventDefault();
     const rawData = e.dataTransfer.getData("text/plain");
@@ -276,34 +281,6 @@ export default function App() {
     }
 
     if (articleId) {
-      // Converted slot keys explicitly into snake_case database targets matching useEffect logic
-      let databaseSlotName = slotKey;
-      if (slotKey === "subFeature") {
-        databaseSlotName = "sub_feature";
-      }
-
-      // Local State Commit
-      setPageSlots(prev => ({
-        ...prev,
-        [`${slotKey}Id`]: articleId
-      }));
-
-     // Cloud Dropzone Slot State Execution Mutations
-  const handleSlotDrop = async (e: React.DragEvent, slotKey: "hero" | "secondary" | "subFeature") => {
-    e.preventDefault();
-    const rawData = e.dataTransfer.getData("text/plain");
-    if (!rawData) return;
-
-    let articleId = "";
-    try {
-      const parsed = JSON.parse(rawData);
-      articleId = parsed.id;
-    } catch (jsonErr) {
-      articleId = rawData;
-    }
-
-    if (articleId) {
-      // Aligns the incoming slot key with the database row format strings
       const databaseSlotName = slotKey === "subFeature" ? "sub_feature" : slotKey;
       
       // Local State Commit
@@ -312,17 +289,19 @@ export default function App() {
         [`${slotKey}Id`]: articleId
       }));
 
-      // Cloud Persistence Commit
+      // Cloud Persistence Commit via Upsert to avoid silent empty rows update failure
       const { error } = await supabase
         .from("layout_slots")
-        .update({ article_id: articleId })
-        .eq("slot_name", databaseSlotName);
+        .upsert(
+          { slot_name: databaseSlotName, article_id: articleId },
+          { onConflict: "slot_name" }
+        );
 
       if (error) {
-        console.error("Dropzone mapping allocation rejected:", error.message);
+        print("Dropzone mapping allocation rejected:", error.message);
         showToast("Network failure. Position syncing decoupled.");
       } else {
-        const found = articles.find(a => a.id === articleId);
+        const found = articles.find(a => String(a.id) === String(articleId));
         showToast(`Linked "${found ? found.headline.slice(0, 20) : "Article"}..." to Marquee! 🎯`);
       }
     }
@@ -331,7 +310,7 @@ export default function App() {
   // Inline Click Editor Focus Loss Save Interceptor
   const handleInlineTextSave = async (articleId: string, field: "headline" | "subheading" | "byline", updatedValue: string) => {
     // 1. Local tracking updates
-    setArticles(prev => prev.map(art => art.id === articleId ? { ...art, [field]: updatedValue } : art));
+    setArticles(prev => prev.map(art => String(art.id) === String(articleId) ? { ...art, [field]: updatedValue } : art));
 
     // 2. Cloud structural updates
     const dbFieldMapping = field === "headline" ? "title" : field;
@@ -341,7 +320,7 @@ export default function App() {
       .eq("id", articleId);
 
     if (error) {
-      console.error("Text alignment sync failure:", error.message);
+      print("Text alignment sync failure:", error.message);
     } else {
       showToast("Edits saved automatically to cloud server! 💾");
     }
@@ -359,18 +338,18 @@ export default function App() {
       .eq("id", articleId);
 
     if (error) {
-      console.error("Deletion query rejected:", error.message);
+      print("Deletion query rejected:", error.message);
       showToast("Database security blocked request.");
       return;
     }
 
     // 2. Clean local structural views
-    setArticles(prev => prev.filter(art => art.id !== articleId));
+    setArticles(prev => prev.filter(art => String(art.id) !== String(articleId)));
     setPageSlots(prev => {
       const updated = { ...prev };
-      if (updated.heroId === articleId) updated.heroId = null;
-      if (updated.secondaryId === articleId) updated.secondaryId = null;
-      if (updated.subFeatureId === articleId) updated.subFeatureId = null;
+      if (String(updated.heroId) === String(articleId)) updated.heroId = null;
+      if (String(updated.secondaryId) === String(articleId)) updated.secondaryId = null;
+      if (String(updated.subFeatureId) === String(articleId)) updated.subFeatureId = null;
       return updated;
     });
 
@@ -421,7 +400,7 @@ export default function App() {
         .select();
 
       if (error) {
-        console.error("Publish execution rejected:", error.message);
+        print("Publish execution rejected:", error.message);
         showToast("Error processing transmission payload.");
         return;
       }
@@ -477,7 +456,7 @@ export default function App() {
       .select();
 
     if (error) {
-      console.error("Failed to promote review submission:", error.message);
+      print("Failed to promote review submission:", error.message);
       showToast("Database synchronization issue.");
       return;
     }
@@ -497,7 +476,7 @@ export default function App() {
       };
 
       setArticles([processed, ...articles]);
-      setPendingReviews(pendingReviews.filter(sub => sub.id !== editingReviewId));
+      setPendingReviews(pendingReviews.filter(sub => String(sub.id) !== String(editingReviewId)));
       setEditingReviewId(null);
       showToast(`Approved and published code row securely!`);
     }
@@ -574,78 +553,78 @@ export default function App() {
   };
 
   // Array filter sorting operations
-const getSortedAndFilteredArchive = () => {
-  return (articles || []).filter(article => {
-      if (!article) return false;
-      
-      const headlineStr = article.headline || "";
-      const bylineStr = article.byline || "";
-      const categoryStr = article.category || "";
-      const searchStr = archiveSearch ? archiveSearch.toLowerCase() : "";
+  const getSortedAndFilteredArchive = () => {
+    return (articles || []).filter(article => {
+        if (!article) return false;
+        
+        const headlineStr = article.headline || "";
+        const bylineStr = article.byline || "";
+        const categoryStr = article.category || "";
+        const searchStr = archiveSearch ? archiveSearch.toLowerCase() : "";
 
-      const matchesSearch = headlineStr.toLowerCase().includes(searchStr) ||
-                            bylineStr.toLowerCase().includes(searchStr) ||
-                            categoryStr.toLowerCase().includes(searchStr);
+        const matchesSearch = headlineStr.toLowerCase().includes(searchStr) ||
+                              bylineStr.toLowerCase().includes(searchStr) ||
+                              categoryStr.toLowerCase().includes(searchStr);
 
-      if (archiveFilterTags.length === 0) return matchesSearch;
-      const articleTags = article.tags || [categoryStr];
-      return matchesSearch && archiveFilterTags.some(t => articleTags.includes(t));
-  }).sort((a, b) => {
-      if (!a || !b) return 0;
-      const timeA = Date.parse(a.date || "") || 0;
-      const timeB = Date.parse(b.date || "") || 0;
-      return archiveSortOrder === "newest" ? timeB - timeA : timeA - timeB;
-  });
-};
-  // Object State Assignment Handlers
+        if (archiveFilterTags.length === 0) return matchesSearch;
+        const articleTags = article.tags || [categoryStr];
+        return matchesSearch && archiveFilterTags.some(t => articleTags.includes(t));
+    }).sort((a, b) => {
+        if (!a || !b) return 0;
+        const timeA = Date.parse(a.date || "") || 0;
+        const timeB = Date.parse(b.date || "") || 0;
+        return archiveSortOrder === "newest" ? timeB - timeA : timeA - timeB;
+    });
+  };
 
+  // Object State Assignment Handlers with Type-Safe Coercion
   const safeArticles = articles || [];
-  const fallbackObj = { headline: "", title: "", byline: "", category: "", paragraphs: [], tags: [], date: "", imageUrl: "", image_data: "" };
 
-  // Use String() conversion to guarantee type matching across database states!
-  const rawHero = safeArticles.find(a => a ? String(a.id) === String(pageSlots?.heroId) : false);
-  const slottedHero = rawHero ? {
-    ...rawHero,
-    headline: rawHero.headline || rawHero.title || "",
-    imageUrl: rawHero.imageUrl || rawHero.image_data || ""
-  } : fallbackObj;
+  const fallbackObj = { 
+    headline: "", 
+    byline: "", 
+    category: "", 
+    paragraphs: [], 
+    tags: [], 
+    date: "" 
+  };
 
-  const rawSecondary = safeArticles.find(a => a ? String(a.id) === String(pageSlots?.secondaryId) : false);
-  const slottedSecondary = rawSecondary ? {
-    ...rawSecondary,
-    headline: rawSecondary.headline || rawSecondary.title || "",
-    imageUrl: rawSecondary.imageUrl || rawSecondary.image_data || ""
-  } : fallbackObj;
+  const slottedHero = pageSlots?.heroId 
+    ? (safeArticles.find(a => String(a?.id) === String(pageSlots.heroId)) || fallbackObj) 
+    : fallbackObj;
 
-  const rawSubFeature = safeArticles.find(a => a ? String(a.id) === String(pageSlots?.subFeatureId) : false);
-  const slottedSubFeature = rawSubFeature ? {
-    ...rawSubFeature,
-    headline: rawSubFeature.headline || rawSubFeature.title || "",
-    imageUrl: rawSubFeature.imageUrl || rawSubFeature.image_data || ""
-  } : fallbackObj;
+  const slottedSecondary = pageSlots?.secondaryId 
+    ? (safeArticles.find(a => String(a?.id) === String(pageSlots.secondaryId)) || fallbackObj) 
+    : fallbackObj;
 
-  const currentSlottedIds = [pageSlots.heroId, pageSlots.secondaryId, pageSlots.subFeatureId].filter(Boolean);
+  const slottedSubFeature = pageSlots?.subFeatureId 
+    ? (safeArticles.find(a => String(a?.id) === String(pageSlots.subFeatureId)) || fallbackObj) 
+    : fallbackObj;
+
+  const currentSlottedIds = [pageSlots.heroId, pageSlots.secondaryId, pageSlots.subFeatureId]
+    .filter(Boolean)
+    .map(String);
   
-const displayedFeedArticles = (articles || []).filter(art => {
-  if (!art) return false;
+  const displayedFeedArticles = (articles || []).filter(art => {
+    if (!art) return false;
 
-  const isSlotted = currentSlottedIds ? currentSlottedIds.includes(art.id) : false;
-  
-  const categoryStr = art.category || "";
-  const artTags = art.tags || [];
-  const matchesCategory = selectedCategory === "All" || 
-                          categoryStr === selectedCategory || 
-                          artTags.includes(selectedCategory);
+    const isSlotted = currentSlottedIds.includes(String(art.id));
+    
+    const categoryStr = art.category || "";
+    const artTags = art.tags || [];
+    const matchesCategory = selectedCategory === "All" || 
+                            categoryStr === selectedCategory || 
+                            artTags.includes(selectedCategory);
 
-  const headlineStr = art.headline || "";
-  const bylineStr = art.byline || "";
-  const searchStr = searchQuery ? searchQuery.toLowerCase() : "";
+    const headlineStr = art.headline || "";
+    const bylineStr = art.byline || "";
+    const searchStr = searchQuery ? searchQuery.toLowerCase() : "";
 
-  const matchesSearch = headlineStr.toLowerCase().includes(searchStr) || 
-                        bylineStr.toLowerCase().includes(searchStr);
+    const matchesSearch = headlineStr.toLowerCase().includes(searchStr) || 
+                          bylineStr.toLowerCase().includes(searchStr);
 
-  return !isSlotted && matchesCategory && matchesSearch;
-});
+    return !isSlotted && matchesCategory && matchesSearch;
+  });
 
   const availableTags = ["Campus", "Sports", "Opinion", "Science", "Tech", "Arts"];
 
@@ -817,8 +796,8 @@ const displayedFeedArticles = (articles || []).filter(art => {
             </aside>
           )}
 
-          {/* COLUMN 2: Center Layout Preview Slate */}
-          <main className={`space-y-8 ${isEditorMode && currentTab === "home" ? leftSidebarExpanded ? "lg:col-span-7" : "lg:col-span-9" : leftSidebarExpanded ? "lg:col-span-10" : "lg:col-span-12"}`}>
+          {/* COLUMN 2: Center Layout Preview Slate with Parenthesized Nested Ternaries */}
+          <main className={`space-y-8 ${isEditorMode && currentTab === "home" ? (leftSidebarExpanded ? "lg:col-span-7" : "lg:col-span-9") : (leftSidebarExpanded ? "lg:col-span-10" : "lg:col-span-12")}`}>
             
             {loading && (
               <div className="flex items-center justify-center py-6 bg-zinc-900 border border-zinc-800 rounded-xl font-mono text-xs gap-3">
@@ -929,9 +908,9 @@ const displayedFeedArticles = (articles || []).filter(art => {
                       onDragOver={(e) => { e.preventDefault(); if (isEditorMode) setIsHeroDraggingOver(true); }}
                       onDragLeave={() => { if (isEditorMode) setIsHeroDraggingOver(false); }}
                       onDrop={(e) => { if (isEditorMode) { handleSlotDrop(e, "hero"); setIsHeroDraggingOver(false); } }}
-                      className={`md:col-span-7 rounded-2xl p-1 transition overflow-hidden border ${isEditorMode && editorSubMode === "Layout Designer" ? isHeroDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60" : "bg-zinc-900 border-zinc-800"}`}
+                      className={`md:col-span-7 rounded-2xl p-1 transition overflow-hidden border ${isEditorMode && editorSubMode === "Layout Designer" ? (isHeroDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60") : "bg-zinc-900 border-zinc-800"}`}
                     >
-                      {slottedHero ? (
+                      {slottedHero && slottedHero.headline ? (
                         <div className="relative group p-5 h-full flex flex-col justify-between">
                           <div className="space-y-3">
                             <span className="inline-block rounded-md bg-amber-500/20 border border-amber-500/30 px-2.5 py-1 text-[10px] font-bold uppercase text-amber-400">{slottedHero.category}</span>
@@ -987,11 +966,11 @@ const displayedFeedArticles = (articles || []).filter(art => {
                       {/* POSITION 2: SECONDARY SLOT GRID TARGET */}
                       <div 
                         onDragOver={(e) => { e.preventDefault(); if (isEditorMode) setIsSecondaryDraggingOver(true); }}
-                       onDragLeave={() => { if (isEditorMode) setIsSecondaryDraggingOver(false); }}
+                        onDragLeave={() => { if (isEditorMode) setIsSecondaryDraggingOver(false); }}
                         onDrop={(e) => { if (isEditorMode) { handleSlotDrop(e, "secondary"); setIsSecondaryDraggingOver(false); } }}
-                        className={`rounded-2xl p-5 transition flex-1 flex flex-col justify-between border ${isEditorMode && editorSubMode === "Layout Designer" ? isSecondaryDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60" : "bg-zinc-900 border-zinc-800"}`}
+                        className={`rounded-2xl p-5 transition flex-1 flex flex-col justify-between border ${isEditorMode && editorSubMode === "Layout Designer" ? (isSecondaryDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60") : "bg-zinc-900 border-zinc-800"}`}
                       >
-                        {slottedSecondary ? (
+                        {slottedSecondary && slottedSecondary.headline ? (
                           <div className="relative group space-y-3 h-full flex flex-col justify-between">
                             <div className="space-y-1.5">
                               <span className="text-[9px] font-mono bg-emerald-400/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 inline-block">{slottedSecondary.category}</span>
@@ -1026,9 +1005,9 @@ const displayedFeedArticles = (articles || []).filter(art => {
                         onDragOver={(e) => { e.preventDefault(); if (isEditorMode) setIsSubFeatureDraggingOver(true); }}
                         onDragLeave={() => { if (isEditorMode) setIsSubFeatureDraggingOver(false); }}
                         onDrop={(e) => { if (isEditorMode) { handleSlotDrop(e, "subFeature"); setIsSubFeatureDraggingOver(false); } }}
-                        className={`rounded-2xl p-5 transition flex-1 flex flex-col justify-between border ${isEditorMode && editorSubMode === "Layout Designer" ? isSubFeatureDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60" : "bg-zinc-900 border-zinc-800"}`}
+                        className={`rounded-2xl p-5 transition flex-1 flex flex-col justify-between border ${isEditorMode && editorSubMode === "Layout Designer" ? (isSubFeatureDraggingOver ? "border-4 border-dashed border-amber-400 bg-amber-400/5" : "border-2 border-dashed border-amber-400/40 bg-zinc-900/60") : "bg-zinc-900 border-zinc-800"}`}
                       >
-                        {slottedSubFeature ? (
+                        {slottedSubFeature && slottedSubFeature.headline ? (
                           <div className="relative group space-y-3 h-full flex flex-col justify-between">
                             <div className="space-y-1.5">
                               <span className="text-[9px] font-mono bg-sky-400/10 text-sky-400 px-2 py-0.5 rounded border border-sky-500/20 inline-block">{slottedSubFeature.category}</span>
@@ -1154,9 +1133,9 @@ const displayedFeedArticles = (articles || []).filter(art => {
                 
                 <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
                   {articles.map((article) => {
-                    const isHero = pageSlots.heroId === article.id;
-                    const isSec = pageSlots.secondaryId === article.id;
-                    const isSub = pageSlots.subFeatureId === article.id;
+                    const isHero = String(pageSlots.heroId) === String(article.id);
+                    const isSec = String(pageSlots.secondaryId) === String(article.id);
+                    const isSub = String(pageSlots.subFeatureId) === String(article.id);
                     const isSlotted = isHero || isSec || isSub;
                     const canDrag = editorSubMode === "Layout Designer";
 
@@ -1223,7 +1202,7 @@ const displayedFeedArticles = (articles || []).filter(art => {
         onUpdateArticleText={handleInlineTextSave}
         onUpdateArticleParagraph={(artId, pIdx, val) => {
           setArticles(prev => prev.map(a => {
-            if (a.id === artId) {
+            if (String(a.id) === String(artId)) {
               const paras = [...a.paragraphs];
               paras[pIdx] = val;
               // Sync change back locally
