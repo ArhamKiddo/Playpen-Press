@@ -261,8 +261,8 @@ export default function App() {
     e.dataTransfer.effectAllowed = "move";
   };
 
-  // Cloud Dropzone Slot State Execution Mutations
-  const handleSlotDrop = async (e: React.DragEvent, slotKey: "heroId" | "secondaryId" | "subFeatureId") => {
+// Cloud Dropzone Slot State Execution Mutations
+  const handleSlotDrop = async (e: React.DragEvent, slotKey: "hero" | "secondary" | "subFeature") => {
     e.preventDefault();
     const rawData = e.dataTransfer.getData("text/plain");
     if (!rawData) return;
@@ -271,16 +271,17 @@ export default function App() {
     try {
       const parsed = JSON.parse(rawData);
       articleId = parsed.id;
-    } catch {
+    } catch (jsonErr) {
       articleId = rawData;
     }
+
     if (articleId) {
-      // Strips "Id" out and converts camelCase cleanly to snake_case for Supabase
-      let databaseSlotName = slotKey.replace('Id', '');
-      if (databaseSlotName === "subFeature") {
+      // Converted slot keys explicitly into snake_case database targets matching useEffect logic
+      let databaseSlotName = slotKey;
+      if (slotKey === "subFeature") {
         databaseSlotName = "sub_feature";
       }
-      
+
       // Local State Commit
       setPageSlots(prev => ({
         ...prev,
@@ -291,7 +292,7 @@ export default function App() {
       const { error } = await supabase
         .from("layout_slots")
         .update({ article_id: articleId })
-        .eq("slot_name", databaseSlotName);
+        .eq("slot_name", databaseSlotName); // Correct slot_name parameter alignment
 
       if (error) {
         console.error("Dropzone mapping allocation rejected:", error.message);
