@@ -551,21 +551,29 @@ export default function App() {
   };
 
   // Array filter sorting operations
-  const getSortedAndFilteredArchive = () => {
-    return articles.filter(article => {
-      const matchesSearch = article.headline.toLowerCase().includes(archiveSearch.toLowerCase()) ||
-                            article.byline.toLowerCase().includes(archiveSearch.toLowerCase()) ||
-                            article.category.toLowerCase().includes(archiveSearch.toLowerCase());
-      if (archiveFilterTags.length === 0) return matchesSearch;
-      const articleTags = article.tags || [article.category];
-      return matchesSearch && archiveFilterTags.some(t => articleTags.includes(t));
-    }).sort((a, b) => {
-      const timeA = Date.parse(a.date) || 0;
-      const timeB = Date.parse(b.date) || 0;
-      return archiveSortOrder === "newest" ? timeB - timeA : timeA - timeB;
-    });
-  };
+const getSortedAndFilteredArchive = () => {
+  return (articles || []).filter(article => {
+      if (!article) return false;
+      
+      const headlineStr = article.headline || "";
+      const bylineStr = article.byline || "";
+      const categoryStr = article.category || "";
+      const searchStr = archiveSearch ? archiveSearch.toLowerCase() : "";
 
+      const matchesSearch = headlineStr.toLowerCase().includes(searchStr) ||
+                            bylineStr.toLowerCase().includes(searchStr) ||
+                            categoryStr.toLowerCase().includes(searchStr);
+
+      if (archiveFilterTags.length === 0) return matchesSearch;
+      const articleTags = article.tags || [categoryStr];
+      return matchesSearch && archiveFilterTags.some(t => articleTags.includes(t));
+  }).sort((a, b) => {
+      if (!a || !b) return 0;
+      const timeA = Date.parse(a.date || "") || 0;
+      const timeB = Date.parse(b.date || "") || 0;
+      return archiveSortOrder === "newest" ? timeB - timeA : timeA - timeB;
+  });
+};
   // Object State Assignment Handlers
   const slottedHero = pageSlots.heroId ? (articles.find(a => a.id === pageSlots.heroId) || null) : null;
   const slottedSecondary = pageSlots.secondaryId ? (articles.find(a => a.id === pageSlots.secondaryId) || null) : null;
