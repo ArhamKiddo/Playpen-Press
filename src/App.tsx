@@ -63,51 +63,34 @@ export default function App() {
   const [loading, setLoading] = useState<boolean>(true);
 
   // Core Real-time Fetch Synchronization
-useEffect(() => {
-    // THIS 'async' IS REQUIRED FOR AWAIT TO WORK
+// Core Real-time Fetch Synchronization
+  useEffect(() => {
     const fetchNewspaperData = async () => {
       setLoading(true);
       try {
-        // Now you can safely 'await' here
+        // 1. Fetch all published articles
+        const { data: articlesData } = await supabase.from("articles").select("*");
+        if (articlesData) setArticles(articlesData);
+
+        // 2. Fetch the active visual front page layout mapping slots
         const { data: slotsData, error: slotError } = await supabase
           .from("layout_slots")
           .select("*");
-          
-        // ... rest of your logic
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
 
-    fetchNewspaperData();
-  }, []); // <--- Make sure this closing bracket is here
-        setPageSlots(mapping); // This ALWAYS sets the state, even if all values are null
-      } catch (err) {
-        console.error("Fetch Error:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchNewspaperData();
-  }, []);
-
-// 2. Fetch the active visual front page layout mapping slots
-        const { data: slotsData, error: slotError } = await supabase
-          .from("layout_slots")
-          .select("*");
-        
         if (slotError) throw slotError;
+
+        // 3. Map the slots accurately
+        const mapping = { heroId: null, secondaryId: null, subFeatureId: null };
         if (slotsData) {
-          const mapping = { heroId: null, secondaryId: null, subFeatureId: null };
-          slotsData.forEach(slot => {
-            if (slot.slot_name === "hero") mapping.heroId = slot.article_id || slot.id;
-            if (slot.slot_name === "secondary") mapping.secondaryId = slot.article_id || slot.id;
-            if (slot.slot_name === "sub_feature") mapping.subFeatureId = slot.article_id || slot.id;
+          slotsData.forEach((slot: any) => {
+            const id = slot.article_id || slot.id;
+            if (slot.slot_name === "hero") mapping.heroId = id;
+            if (slot.slot_name === "secondary") mapping.secondaryId = id;
+            if (slot.slot_name === "sub_feature") mapping.subFeatureId = id;
           });
-          setPageSlots(mapping);
         }
+        setPageSlots(mapping);
+        
       } catch (err: any) {
         console.error("Supabase Initialization Error:", err.message);
         showToast("Error connecting to database infrastructure.");
