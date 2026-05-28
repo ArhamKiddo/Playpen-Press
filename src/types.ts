@@ -10,6 +10,8 @@ export interface Article {
   readTime: string;
   isFeatured?: boolean;
   tags?: string[];
+  front_page_tag?: "hero" | "secondary" | "sub_feature" | null;
+  additionalImages?: string[];
 }
 
 export interface EditorialSuggestion {
@@ -36,4 +38,13 @@ export interface HeadlineOption {
   title: string;
   style: string;
   subtitle: string;
+}
+
+export interface GalleryItem {
+  id: string;
+  imageUrl: string;
+  caption?: string;
+  takenAt: string; // Date & time taken metadata e.g. "May 28, 2026, 3:30 PM"
+  articleId?: string; // Optional connection to parent story
+  articleHeadline?: string; // Parent story title
 }

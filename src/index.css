@@ -168,3 +168,78 @@
   font-weight: bold;
 }
 
+/* Tactile Crumpled Paper Creases & Cozy Antique Texturing */
+.paper-crease-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  mix-blend-mode: multiply;
+  opacity: 0.14;
+  background: 
+    /* Primary horizontal fold */
+    linear-gradient(178deg, transparent 49.6%, rgba(0, 0, 0, 0.28) 49.9%, rgba(255, 255, 255, 0.45) 50.1%, transparent 50.4%) no-repeat,
+    /* Vertical offset fold crease */
+    linear-gradient(88deg, transparent 33.2%, rgba(0, 0, 0, 0.24) 33.5%, rgba(255, 255, 255, 0.4) 33.7%, transparent 34%) no-repeat,
+    /* Diagonal harsh crumple fold */
+    linear-gradient(28deg, transparent 65.1%, rgba(0, 0, 0, 0.22) 65.4%, rgba(255, 255, 255, 0.35) 65.6%, transparent 65.9%) no-repeat,
+    /* Supporting soft random crush crease */
+    linear-gradient(115deg, transparent 78.4%, rgba(0, 0, 0, 0.18) 78.7%, rgba(255, 255, 255, 0.3) 78.9%, transparent 79.2%) no-repeat,
+    /* Ambient shade and light play representing wrinkled paper pockets */
+    radial-gradient(ellipse at 15% 30%, rgba(255,255,255,0.18) 0%, rgba(0,0,0,0.08) 80%),
+    radial-gradient(ellipse at 80% 70%, rgba(255,255,255,0.14) 0%, rgba(0,0,0,0.1) 85%);
+  background-size: 100% 100%;
+}
+
+/* Warm Newspaper halftone dot texture and coffee stains */
+.newsprint-cozy-texture {
+  position: relative;
+}
+.newsprint-cozy-texture::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: radial-gradient(circle, #000 10%, transparent 11%);
+  background-size: 3px 3px;
+}
+
+/* Distressed Vintage Ink Stamp */
+.distressed-press-stamp {
+  font-family: var(--font-serif);
+  border: 3px double currentColor;
+  padding: 4px 8px;
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  font-size: 11px;
+  display: inline-block;
+  transform: rotate(-6deg);
+  border-radius: 4px;
+  opacity: 0.8;
+  box-shadow: 0 0 0 1px currentColor, inset 0 0 0 1px currentColor;
+  text-shadow: 0.5px 0.5px 0px rgba(0,0,0,0.15);
+}
+
+.distressed-stamp-glow {
+  animation: inkStampGlow 3s ease-in-out infinite alternate;
+}
+
+@keyframes inkStampGlow {
+  0% { opacity: 0.7; }
+  100% { opacity: 0.95; }
+}
+
+/* Classic Double column rules */
+.newspaper-col-rule {
+  border-right: 1px dashed var(--theme-border);
+}
+
+

@@ -10,8 +10,8 @@ interface MainHeaderProps {
   userRole: "Viewer" | "Editor";
   onChangeRole: (role: "Viewer" | "Editor") => void;
   openSidebar: () => void;
-  onTabChange: (tab: "home" | "archive") => void;
-  currentTab: "home" | "archive";
+  onTabChange: (tab: "home" | "gallery" | "archive") => void;
+  currentTab: "home" | "gallery" | "archive";
   sidebarExpanded: boolean;
   setSidebarExpanded: (expanded: boolean) => void;
   siteTitle?: string;
@@ -155,6 +155,12 @@ export default function MainHeader({
               className={`pb-1 border-b-2 transition ${currentTab === "home" ? "border-amber-400 text-amber-400" : "border-transparent text-zinc-400 hover:text-zinc-200"}`}
             >
               Home Frontpage
+            </button>
+            <button
+              onClick={() => onTabChange("gallery")}
+              className={`pb-1 border-b-2 transition ${currentTab === "gallery" ? "border-amber-400 text-amber-400" : "border-transparent text-zinc-400 hover:text-zinc-200"}`}
+            >
+              Gallery &amp; Photos 📷
             </button>
             <button
               onClick={() => onTabChange("archive")}
