@@ -1,13 +1,14 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient } from '@supabase/supabase-js';
 
-// Fetch the variables from Vite environment variables (will look in process.env or .env secrets)
-const supabaseUrl = (import.meta as any).env?.VITE_SUPABASE_URL || "";
-const supabaseAnonKey = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Verify configuration status
-export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey);
+// Hard fallback check to see what Vercel is actually reading
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error("CRITICAL: Vercel cannot read your environment variables!");
+}
 
-// Safely construct the client
-export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey) 
-  : null;
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder-url.supabase.co', 
+  supabaseAnonKey || 'placeholder-key'
+);
